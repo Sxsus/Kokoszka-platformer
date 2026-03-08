@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Kokoszka Platformer</title>
+<style>
+  body { margin:0; background:#87ceeb; font-family:sans-serif; text-align:center; }
+  canvas { background:#cceeff; display:block; margin:0 auto; }
+  button { margin:10px; padding:10px 20px; font-size:18px; cursor:pointer; }
+</style>
+</head>
+<body>
+<h1>Kokoszka Platformer</h1>
+<div id="menu">
+  <button onclick="startLevel(0)">Łatwy</button>
+  <button onclick="startLevel(1)">Średni</button>
+  <button onclick="startLevel(2)">Trudny</button>
+</div>
+<canvas id="gameCanvas" width="800" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const TILE_SIZE = 40;
+const GRAVITY = 0.5;
+const JUMP_SPEED = -10;
+const GLIDE_SPEED = 0.1; // zmniejsza prędkość opadania
+const PLAYER_COLOR = 'yellow';
+const NUGGET_COLOR = 'orange';
+
+let keys = {};
+let currentLevel = 0;
+let player, lastCheckpoint;
+let gameRunning = false;
+
+// Poziomy: 0 = powietrze, 1 = platforma, 2 = przeszkoda do kłucia, 3 = checkpoint, 4 = śmierć
+const levels = [
+  // Łatwy
+  [
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,2,0,0,0,0,3,0,0,0,0,0,0,0],
+    [1,1,0,0,0,0,1,1,1,0,0,0,1,1,1,0,0,1,1,1]
+  ],
+  // Średni
+  [
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,2,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,2,0,0,0,0,3,0,2,0,0,0,0,0,0,0,0,0],
+    [1,1,0,0,1,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,1,1,0,1]
+  ],
+  // Trudny
+  [
+    [0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,2,0,0,0,0,2,0,0,0,0],
+    [0,0,0,3,0,2,0,0,3,0,2,0,0,3,0,2,0,0,3,0,2,0,0,0,0],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+  ]
+];
+
+function startLevel(levelIndex){
+  currentLevel = levelIndex;
+  document.getElementById('menu').style.display = 'none';
+  gameRunning = true;
+  initPlayer();
+  requestAnimationFrame(gameLoop);
+}
+
+function initPlayer(){
+  player = {
+    x: TILE_SIZE,
+    y: canvas.height - TILE_SIZE*2,
+    w: TILE_SIZE,
+    h: TILE_SIZE,
+    vx: 0,
+    vy: 0,
+    onGround: false,
+    gliding: false,
+    glideTimer: 0
+  };
+  lastCheckpoint = {x: player.x, y: player.y};
+}
+
+document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+function gameLoop(){
+  if(!gameRunning) return;
+
+  // Sterowanie
+  if(keys['a']) player.vx = -5;
+  else if(keys['d']) player.vx = 5;
+  else player.vx = 0;
+
+  if(keys[' ']){ // skok
+    if(player.onGround){
+      player.vy = JUMP_SPEED;
+      player.onGround = false;
+    }
+  }
+
+  if(keys['w']){ // szybowanie
+    if(!player.onGround && player.glideTimer < 2){
+      player.gliding = true;
+    }
+  } else {
+    player.gliding = false;
+  }
+
+  if(player.gliding){
+    player.vy *= 1 - GLIDE_SPEED;
+    player.glideTimer += 1/60;
+  } else if(player.onGround){
+    player.glideTimer = 0;
+  }
+
+  if(keys['s']){ // kłucie
+    // Sprawdź przeszkody typu 2
+    const tileX = Math.floor((player.x + player.w/2)/TILE_SIZE);
+    const tileY = Math.floor((player.y + player.h/2)/TILE_SIZE);
+    if(getTile(tileX, tileY) === 2){
+      setTile(tileX, tileY, 0); // usuń przeszkodę
+    }
+  }
+
+  // Ruch i grawitacja
+  player.vy += GRAVITY;
+  player.x += player.vx;
+  player.y += player.vy;
+
+  player.onGround = false;
+  handleCollisions();
+
+  // Rysowanie
+  draw();
+
+  requestAnimationFrame(gameLoop);
+}
+
+function getTile(x, y){
+  const level = levels[currentLevel];
+  if(y < 0 || y >= level.length || x < 0 || x >= level[0].length) return 0;
+  return level[y][x];
+}
+
+function setTile(x,y,value){
+  levels[currentLevel][y][x] = value;
+}
+
+function handleCollisions(){
+  const level = levels[currentLevel];
+  const startX = Math.floor(player.x / TILE_SIZE);
+  const endX = Math.floor((player.x + player.w) / TILE_SIZE);
+  const startY = Math.floor(player.y / TILE_SIZE);
+  const endY = Math.floor((player.y + player.h) / TILE_SIZE);
+
+  for(let y = startY; y <= endY; y++){
+    for(let x = startX; x <= endX; x++){
+      const tile = getTile(x,y);
+      if(tile === 1 || tile === 2){ // podłoga/przeszkoda
+        const tileLeft = x * TILE_SIZE;
+        const tileRight = tileLeft + TILE_SIZE;
+        const tileTop = y * TILE_SIZE;
+        const tileBottom = tileTop + TILE_SIZE;
+
+        // Od góry
+        if(player.vy > 0 && player.y + player.h > tileTop && player.y < tileTop){
+          player.y = tileTop - player.h;
+          player.vy = 0;
+          player.onGround = true;
+        }
+        // Od dołu
+        else if(player.vy < 0 && player.y < tileBottom && player.y + player.h > tileBottom){
+          player.y = tileBottom;
+          player.vy = 0;
+        }
+        // Od boków
+        if(player.vx > 0 && player.x + player.w > tileLeft && player.x < tileLeft){
+          player.x = tileLeft - player.w;
+        }
+        else if(player.vx < 0 && player.x < tileRight && player.x + player.w > tileRight){
+          player.x = tileRight;
+        }
+      } else if(tile === 3){ // checkpoint
+        lastCheckpoint = {x: x*TILE_SIZE, y: y*TILE_SIZE - player.h};
+      } else if(tile === 4){ // śmierć
+        die();
+      }
+    }
+  }
+
+  // Śmierć jeśli spadnie poza planszę
+  if(player.y > canvas.height){
+    die();
+  }
+}
+
+function die(){
+  // Animacja nugget (prosta)
+  ctx.fillStyle = NUGGET_COLOR;
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+  // Reset do ostatniego checkpointa
+  player.x = lastCheckpoint.x;
+  player.y = lastCheckpoint.y;
+  player.vx = 0;
+  player.vy = 0;
+  player.onGround = false;
+  player.gliding = false;
+  player.glideTimer = 0;
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const level = levels[currentLevel];
+
+  // Rysuj kafelki
+  for(let y=0; y<level.length; y++){
+    for(let x=0; x<level[y].length; x++){
+      const tile = level[y][x];
+      if(tile === 1) ctx.fillStyle = 'green'; // platforma
+      else if(tile === 2) ctx.fillStyle = 'brown'; // przeszkoda kłucia
+      else if(tile === 3) ctx.fillStyle = 'blue'; // checkpoint
+      else if(tile === 4) ctx.fillStyle = 'red'; // śmierć
+      else continue;
+      ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
+  }
+
+  // Rysuj gracza
+  ctx.fillStyle = PLAYER_COLOR;
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+}
+</script>
+</body>
+</html>
