@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Kokoszka Platformer - Ultimate Master Edition</title>
+    <style>
+        body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        canvas { background: #87CEEB; box-shadow: 0 0 60px rgba(0,0,0,1); border: 4px solid #333; image-rendering: pixelated; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+<script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const TILE_SIZE = 40;
+
+    // --- 1. DOKŁADNE ŚCIEŻKI DO 35 PLIKÓW ---
+    const assets = {};
+    const paths = {
+        'KuraStojaca': 'postac/KuraStojaca.png', 'KuraChodzaca': 'postac/KuraChodzaca.png', 'KuraSkok': 'postac/KuraSkok.png',
+        'KuraSzybujaca': 'postac/KuraSzybujaca.png', 'KuraKlucanie': 'postac/KuraKlucanie.png', 'kuraNuggets': 'postac/kuraNuggets.png', 'kurczak': 'postac/kurczak.png',
+        'trawa': 'blok/trawa.png', 'ziemia': 'blok/ziemia.png', 'kamien': 'blok/kamien.png', 'drewno': 'blok/drewno.png', 'lod': 'blok/lod.png', 'piasek': 'blok/piasek.png', 'void': 'blok/void.png',
+        'lawa': 'hazard/lawa.png', 'kolec': 'hazard/kolec.png', 'blokkolcow': 'hazard/blokkolcow.png',
+        'checkPoint': 'mechanika/checkPoint.png', 'portal': 'mechanika/portal.png', 'rura': 'mechanika/rura.png', 'Ziarna': 'mechanika/Ziarna.png', 'tarcza': 'mechanika/tarcza.png', 'strzalkaSkoku': 'mechanika/strzalkaSkoku.png',
+        'niebo': 'dekoracje/niebo.png', 'slonce': 'dekoracje/slonce.png', 'chmura': 'dekoracje/chmura.png', 'kwiat': 'dekoracje/kwiat.png', 'krzak': 'dekoracje/krzak.png', 'krazkowocow': 'dekoracje/krazkowocow.png', 'liscie': 'dekoracje/liscie.png', 'maledrzewo': 'dekoracje/maledrzewo.png', 'duzedrzewo': 'dekoracje/duzedrzewo.png', 'samotnyKamien': 'dekoracje/samotnyKamien.png',
+        'zebatka': 'ui/zebatka.png', 'zegar': 'ui/zegar.png'
+    };
+
+    Object.keys(paths).forEach(name => {
+        assets[name] = new Image();
+        assets[name].src = `assets/${paths[name]}`;
+    });
+
+    // --- LOGIKA GRY ---
+    let gameState = "LOBBY", isPaused = false, currentLevel = "easy";
+    let cameraX = 0, keys = {}, progress = JSON.parse(localStorage.getItem('kokoszka_save')) || { easy: 0, medium: 0, hard: 0 };
+    let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
+    let player = { x: 0, y: 0, w: 40, h: 40, vx: 0, vy: 0, speed: 5, onGround: false, crouching: false, dead: false, respawnX: 0, respawnY: 0, deathTimer: 0, lastGlide: 0, inWater: false, score: 0, dir: 1, shieldTimer: 0, jumpBoostTimer: 0 };
+
+    function buildLevel(diff) {
+        currentLevel = diff;
+        let len = diff === 'easy' ? 2250 : (diff === 'medium' ? 4500 : 6750);
+        Object.keys(world).forEach(k => world[k] = []);
+        world.lonelyStone = { x: 1200, y: 480, w: 40, h: 40 };
+
+        for (let i = 0; i < len; i++) {
+            let x = i * TILE_SIZE, groundY = 520;
+            if (i === 10) world.decos.push({x, y: 60, id: 'slonce'});
+            if (i % 30 === 0) world.decos.push({x, y: 40 + Math.random()*120, id: 'chmura'});
+            if (i % 40 === 0) world.decos.push({x, y: 0, id: 'liscie'});
+            if (i % 25 === 5) world.decos.push({x, y: groundY - 40, id: 'maledrzewo'});
+            if (i % 60 === 30) world.decos.push({x, y: groundY - 120, id: 'duzedrzewo'});
+            if (i % 18 === 7) world.decos.push({x, y: groundY - 20, id: 'kwiat'});
+            if (i % 22 === 11) world.decos.push({x, y: groundY - 20, id: 'krzak'});
+            if (i % 45 === 22) world.decos.push({x, y: groundY - 20, id: 'krazkowocow'});
+
+            if (i > 50 && i % 80 < 4 && diff !== 'easy') world.hazards.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'void'});
+            else if (i % 35 > 32) world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'lod'});
+            else if (i % 30 > 27) world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'piasek'});
+            else world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'trawa'});
+
+            world.tiles.push({x, y: groundY + 40, w: TILE_SIZE, h: TILE_SIZE, id: (i%6===0?'kamien':(i%10===0?'drewno':'ziemia'))});
+
+            if (i > 10 && i < len - 20) {
+                if (i % 100 === 0) world.checkpoints.push({x, y: groundY - 40, w: TILE_SIZE, h: TILE_SIZE});
+                if (i % 14 === 0) world.seeds.push({x: x+10, y: groundY-30, w: 20, h: 20});
+                if (i % 40 === 0) world.tiles.push({x, y: groundY-80, w: TILE_SIZE, h: TILE_SIZE, id: 'rura'});
+                if (i % 250 === 20) world.teleports.push({x, y: groundY-40, w: TILE_SIZE, h: TILE_SIZE});
+                if (i % 55 === 27) world.hazards.push({x, y: groundY-40, w: TILE_SIZE, h: TILE_SIZE, id: 'blokkolcow'});
+                if (i % 35 === 17) world.hazards.push({x, y: groundY-40, w: TILE_SIZE, h: TILE_SIZE, id: 'kolec'});
+                if (i % 300 === 150) world.powerups.push({x, y: groundY-100, w: 30, h: 30, id: 'tarcza'});
+                if (i % 450 === 250) world.powerups.push({x, y: groundY-140, w: 30, h: 30, id: 'strzalkaSkoku'});
+            }
+        }
+        player.x = 100; player.y = 400; player.respawnX = 100; player.respawnY = 400;
+        world.chicks.push({x: (len-5)*TILE_SIZE, y: 485, w: 35, h: 35});
+        player.score = 0; player.dead = false; gameState = "PLAYING"; cameraX = 0;
+        player.shieldTimer = 0; player.jumpBoostTimer = 0;
+    }
+
+    // --- SYSTEM STEROWANIA I RYSOWANIA (PODOBNY DO POPRZEDNIEGO) ---
+    // (Pominięto powtarzającą się logikę update/draw dla czytelności struktury)
+    // UWAGA: Użyj pełnego kodu z mojej poprzedniej wiadomości, ale z tą sekcją paths na początku!
+</script>
+</body>
+</html>
