@@ -16,33 +16,60 @@
     const ctx = canvas.getContext("2d");
     const TILE_SIZE = 40;
 
-    // --- 1. DOKŁADNE ŚCIEŻKI DO 35 PLIKÓW ---
+    // --- 1. NOWE ŚCIEŻKI DO PLIKÓW (Z FOLDEREM "bloki") ---
     const assets = {};
     const paths = {
-        'KuraStojaca': 'postac/KuraStojaca.png', 'KuraChodzaca': 'postac/KuraChodzaca.png', 'KuraSkok': 'postac/KuraSkok.png',
-        'KuraSzybujaca': 'postac/KuraSzybujaca.png', 'KuraKlucanie': 'postac/KuraKlucanie.png', 'kuraNuggets': 'postac/kuraNuggets.png', 'kurczak': 'postac/kurczak.png',
-        'trawa': 'blok/trawa.png', 'ziemia': 'blok/ziemia.png', 'kamien': 'blok/kamien.png', 'drewno': 'blok/drewno.png', 'lod': 'blok/lod.png', 'piasek': 'blok/piasek.png', 'void': 'blok/void.png',
+        // Postać
+        'KuraStojaca': 'postac/KuraStojaca.png', 'KuraChodzaca': 'postac/KuraChodzaca.png', 
+        'KuraSkok': 'postac/KuraSkok.png', 'KuraSzybujaca': 'postac/KuraSzybujaca.png', 
+        'KuraKlucanie': 'postac/KuraKlucanie.png', 'kuraNuggets': 'postac/kuraNuggets.png', 'kurczak': 'postac/kurczak.png',
+        
+        // Twoj nowy folder "bloki"
+        'trawa': 'bloki/trawa.png', 'ziemia': 'bloki/ziemia.png', 'kamien': 'bloki/kamien.png', 
+        'drewno': 'bloki/drewno.png', 'lod': 'bloki/lod.png', 'piasek': 'bloki/piasek.png', 'void': 'bloki/void.png',
+        
+        // Hazard
         'lawa': 'hazard/lawa.png', 'kolec': 'hazard/kolec.png', 'blokkolcow': 'hazard/blokkolcow.png',
-        'checkPoint': 'mechanika/checkPoint.png', 'portal': 'mechanika/portal.png', 'rura': 'mechanika/rura.png', 'Ziarna': 'mechanika/Ziarna.png', 'tarcza': 'mechanika/tarcza.png', 'strzalkaSkoku': 'mechanika/strzalkaSkoku.png',
-        'niebo': 'dekoracje/niebo.png', 'slonce': 'dekoracje/slonce.png', 'chmura': 'dekoracje/chmura.png', 'kwiat': 'dekoracje/kwiat.png', 'krzak': 'dekoracje/krzak.png', 'krazkowocow': 'dekoracje/krazkowocow.png', 'liscie': 'dekoracje/liscie.png', 'maledrzewo': 'dekoracje/maledrzewo.png', 'duzedrzewo': 'dekoracje/duzedrzewo.png', 'samotnyKamien': 'dekoracje/samotnyKamien.png',
+        
+        // Mechanika
+        'checkPoint': 'mechanika/checkPoint.png', 'portal': 'mechanika/portal.png', 
+        'rura': 'mechanika/rura.png', 'Ziarna': 'mechanika/Ziarna.png', 
+        'tarcza': 'mechanika/tarcza.png', 'strzalkaSkoku': 'mechanika/strzalkaSkoku.png',
+        
+        // Dekoracje
+        'niebo': 'dekoracje/niebo.png', 'slonce': 'dekoracje/slonce.png', 'chmura': 'dekoracje/chmura.png', 
+        'kwiat': 'dekoracje/kwiat.png', 'krzak': 'dekoracje/krzak.png', 'krazkowocow': 'dekoracje/krazkowocow.png', 
+        'liscie': 'dekoracje/liscie.png', 'maledrzewo': 'dekoracje/maledrzewo.png', 
+        'duzedrzewo': 'dekoracje/duzedrzewo.png', 'samotnyKamien': 'dekoracje/samotnyKamien.png',
+        
+        // UI
         'zebatka': 'ui/zebatka.png', 'zegar': 'ui/zegar.png'
     };
 
+    // Ładowanie grafik prosto z głównych folderów (np. bloki/trawa.png)
     Object.keys(paths).forEach(name => {
         assets[name] = new Image();
-        assets[name].src = `assets/${paths[name]}`;
+        // UWAGA: Kod szuka teraz folderów bez dodatkowego przedrostka "assets"
+        assets[name].src = paths[name]; 
     });
 
-    // --- LOGIKA GRY ---
+    // --- 2. STAN GRY ---
     let gameState = "LOBBY", isPaused = false, currentLevel = "easy";
-    let cameraX = 0, keys = {}, progress = JSON.parse(localStorage.getItem('kokoszka_save')) || { easy: 0, medium: 0, hard: 0 };
+    let cameraX = 0, keys = {}, progress = JSON.parse(localStorage.getItem('kokoszka_master_save')) || { easy: 0, medium: 0, hard: 0 };
     let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
-    let player = { x: 0, y: 0, w: 40, h: 40, vx: 0, vy: 0, speed: 5, onGround: false, crouching: false, dead: false, respawnX: 0, respawnY: 0, deathTimer: 0, lastGlide: 0, inWater: false, score: 0, dir: 1, shieldTimer: 0, jumpBoostTimer: 0 };
+    
+    let player = { 
+        x: 0, y: 0, w: 40, h: 40, vx: 0, vy: 0, speed: 5, onGround: false, crouching: false, dead: false, 
+        respawnX: 0, respawnY: 0, deathTimer: 0, lastGlide: 0, inWater: false, score: 0, dir: 1,
+        shieldTimer: 0, jumpBoostTimer: 0
+    };
 
+    // --- 3. GENERATOR ŚWIATA ---
     function buildLevel(diff) {
         currentLevel = diff;
         let len = diff === 'easy' ? 2250 : (diff === 'medium' ? 4500 : 6750);
         Object.keys(world).forEach(k => world[k] = []);
+        
         world.lonelyStone = { x: 1200, y: 480, w: 40, h: 40 };
 
         for (let i = 0; i < len; i++) {
@@ -56,11 +83,17 @@
             if (i % 22 === 11) world.decos.push({x, y: groundY - 20, id: 'krzak'});
             if (i % 45 === 22) world.decos.push({x, y: groundY - 20, id: 'krazkowocow'});
 
-            if (i > 50 && i % 80 < 4 && diff !== 'easy') world.hazards.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'void'});
-            else if (i % 35 > 32) world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'lod'});
-            else if (i % 30 > 27) world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'piasek'});
-            else world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'trawa'});
-
+            if (i > 50 && i % 80 < 4 && diff !== 'easy') {
+                world.hazards.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'void'});
+            } else if (i % 50 > 47) {
+                world.waters.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'woda'}); // Woda w bloki/
+            } else if (i % 35 > 32) {
+                world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'lod'});
+            } else if (i % 30 > 27) {
+                world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'piasek'});
+            } else {
+                world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'trawa'});
+            }
             world.tiles.push({x, y: groundY + 40, w: TILE_SIZE, h: TILE_SIZE, id: (i%6===0?'kamien':(i%10===0?'drewno':'ziemia'))});
 
             if (i > 10 && i < len - 20) {
@@ -70,6 +103,7 @@
                 if (i % 250 === 20) world.teleports.push({x, y: groundY-40, w: TILE_SIZE, h: TILE_SIZE});
                 if (i % 55 === 27) world.hazards.push({x, y: groundY-40, w: TILE_SIZE, h: TILE_SIZE, id: 'blokkolcow'});
                 if (i % 35 === 17) world.hazards.push({x, y: groundY-40, w: TILE_SIZE, h: TILE_SIZE, id: 'kolec'});
+                
                 if (i % 300 === 150) world.powerups.push({x, y: groundY-100, w: 30, h: 30, id: 'tarcza'});
                 if (i % 450 === 250) world.powerups.push({x, y: groundY-140, w: 30, h: 30, id: 'strzalkaSkoku'});
             }
@@ -80,9 +114,140 @@
         player.shieldTimer = 0; player.jumpBoostTimer = 0;
     }
 
-    // --- SYSTEM STEROWANIA I RYSOWANIA (PODOBNY DO POPRZEDNIEGO) ---
-    // (Pominięto powtarzającą się logikę update/draw dla czytelności struktury)
-    // UWAGA: Użyj pełnego kodu z mojej poprzedniej wiadomości, ale z tą sekcją paths na początku!
+    // --- 4. STEROWANIE ---
+    window.addEventListener("keydown", e => { 
+        keys[e.key.toLowerCase()] = true; 
+        if (e.key === " " && gameState === "PLAYING" && !isPaused && !player.dead) {
+            let power = player.jumpBoostTimer > 0 ? -18.5 : -12.5; 
+            if (player.inWater) player.vy = -6.5; else if (player.onGround) { player.vy = power; player.onGround = false; }
+        }
+    });
+    window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+    canvas.addEventListener("mousedown", e => {
+        const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+        if (gameState === "LOBBY") {
+            if (mx > 300 && mx < 500) {
+                if (my > 200 && my < 250) buildLevel('easy');
+                else if (my > 300 && my < 350) buildLevel('medium');
+                else if (my > 400 && my < 450) buildLevel('hard');
+            }
+        } else if (mx > 740 && my < 60) isPaused = !isPaused;
+        else if (isPaused && mx > 300 && mx < 500) {
+            if (my > 380 && my < 430) isPaused = false;
+            if (my > 450 && my < 500) gameState = "LOBBY";
+        }
+    });
+
+    function collides(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+
+    // --- 5. AKTUALIZACJA ---
+    function update() {
+        if (gameState !== "PLAYING" || isPaused) return;
+        cameraX += (player.x - 380 - cameraX) * 0.1;
+        if (cameraX < 0) cameraX = 0;
+        if (player.shieldTimer > 0) player.shieldTimer--;
+        if (player.jumpBoostTimer > 0) player.jumpBoostTimer--;
+
+        if (player.dead) {
+            player.vy += 0.5; player.y += player.vy; player.deathTimer++;
+            if (player.deathTimer > 60) {
+                player.dead = false; player.x = player.respawnX; player.y = player.respawnY;
+                player.vy = 0; player.deathTimer = 0; player.h = 40;
+            } return;
+        }
+
+        const near = (obj) => obj.x > cameraX - 100 && obj.x < cameraX + 900;
+        const activeTiles = world.tiles.filter(near);
+        player.inWater = world.waters.filter(near).some(w => collides(player, w));
+
+        let spd = player.speed;
+        let gr = activeTiles.find(t => collides({...player, y: player.y + 1}, t));
+        if (gr) { if(gr.id === 'lod') spd *= 1.6; if(gr.id === 'piasek') spd *= 0.5; }
+
+        if (keys['s'] && !player.inWater) {
+            if (!player.crouching) { player.h = 24; player.y += 16; player.crouching = true; }
+        } else if (player.crouching) {
+            let tR = { x: player.x, y: player.y - 16, w: player.w, h: 40 };
+            if (!activeTiles.some(t => collides(tR, t))) { player.h = 40; player.y -= 16; player.crouching = false; }
+        }
+
+        player.vx = 0;
+        if (keys['a']) { player.vx = -spd; player.dir = -1; }
+        if (keys['d']) { player.vx = spd; player.dir = 1; }
+        if (player.inWater) player.vx *= 0.6;
+        player.x += player.vx;
+        activeTiles.forEach(t => { if (collides(player, t)) { if (player.vx > 0) player.x = t.x - player.w; if (player.vx < 0) player.x = t.x + t.w; }});
+
+        let glide = keys['w'] && !player.onGround && !player.inWater && Date.now() - player.lastGlide > 10000;
+        if (glide) { player.vy = 1; player.lastGlide = Date.now(); }
+        player.vy += player.inWater ? 0.22 : (glide ? 0 : 0.65);
+        player.y += player.vy; player.onGround = false;
+        activeTiles.forEach(t => { if (collides(player, t)) { if (player.vy > 0) { player.y = t.y - player.h; player.vy = 0; player.onGround = true; } else if (player.vy < 0) { player.y = t.y + t.h; player.vy = 0; } }});
+
+        if (player.y > 600) player.dead = true;
+        world.hazards.filter(near).forEach(h => { if (collides(player, h) && player.shieldTimer <= 0) { player.dead = true; player.vy = -8.5; }});
+        if (world.lonelyStone && collides(player, world.lonelyStone)) { if (player.vx > 0) player.x = world.lonelyStone.x - player.w; if (player.vx < 0) player.x = world.lonelyStone.x + world.lonelyStone.w; }
+        world.powerups.filter(near).forEach((p) => { if (collides(player, p)) { if (p.id === 'tarcza') player.shieldTimer = 300; if (p.id === 'strzalkaSkoku') player.jumpBoostTimer = 600; world.powerups.splice(world.powerups.indexOf(p), 1); }});
+        world.checkpoints.filter(near).forEach(c => { if (collides(player, c)) { player.respawnX = c.x; player.respawnY = c.y - 40; }});
+        world.seeds.filter(near).forEach((s) => { if (collides(player, s)) { world.seeds.splice(world.seeds.indexOf(s), 1); player.score += 10; }});
+        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; localStorage.setItem('kokoszka_save', JSON.stringify(progress)); }});
+        world.teleports.filter(near).forEach(tp => { if (collides(player, tp)) player.x += 1600; });
+    }
+
+    // --- 6. RYSOWANIE ---
+    function draw() {
+        ctx.clearRect(0,0,800,600);
+        let bX = -(cameraX * 0.15) % 800;
+        drawS('niebo', bX, 0, 800, 600); drawS('niebo', bX+800, 0, 800, 600);
+
+        if (gameState === "LOBBY") {
+            ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,800,600);
+            ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 40px Arial";
+            ctx.fillText("KOKOSZKA MASTER COLLECTION", 400, 100);
+            ['easy', 'medium', 'hard'].forEach((lv, i) => {
+                ctx.fillStyle = progress[lv] ? "#2ecc71" : "#e67e22"; ctx.fillRect(300, 200 + i*100, 200, 50);
+                ctx.fillStyle = "white"; ctx.font = "bold 20px Arial"; ctx.fillText(`${lv.toUpperCase()} (${progress[lv]}/1)`, 400, 232 + i*100);
+            });
+        } else {
+            const vL = cameraX - 120, vR = cameraX + 920;
+            world.decos.filter(d => d.x > vL && d.x < vR).forEach(d => { let w = d.id === 'duzedrzewo' ? 80 : 40; let h = d.id === 'duzedrzewo' ? 120 : 40; drawS(d.id, d.x-cameraX, d.y, w, h); });
+            world.tiles.filter(t => t.x > vL && t.x < vR).forEach(t => drawS(t.id, t.x-cameraX, t.y, 40, 40));
+            world.hazards.filter(h => h.x > vL && h.x < vR).forEach(h => drawS(h.id, h.x-cameraX, h.y, 40, 40));
+            ctx.globalAlpha = 0.6; world.waters.filter(w => w.x > vL && w.x < vR).forEach(w => drawS('woda', w.x-cameraX, w.y, 40, 40)); ctx.globalAlpha = 1;
+            world.seeds.filter(s => s.x > vL && s.x < vR).forEach(s => drawS('Ziarna', s.x-cameraX, s.y, 20, 20));
+            world.powerups.filter(near).forEach(p => drawS(p.id, p.x-cameraX, p.y, 30, 30));
+            world.checkpoints.filter(cp => cp.x > vL && cp.x < vR).forEach(cp => drawS('checkPoint', cp.x-cameraX, cp.y, 40, 40));
+            world.chicks.forEach(c => drawS('kurczak', c.x-cameraX, c.y, 35, 35));
+            if(world.lonelyStone) drawS('samotnyKamien', world.lonelyStone.x-cameraX, world.lonelyStone.y, 40, 40);
+
+            ctx.save(); ctx.translate(player.x - cameraX + 20, player.y + player.h/2); if (player.dir === -1) ctx.scale(-1, 1);
+            let s = player.dead ? 'kuraNuggets' : (player.vx !== 0 ? 'KuraChodzaca' : 'KuraStojaca');
+            if (!player.onGround && !player.dead) s = 'KuraSkok';
+            if (keys['w'] && !player.onGround) s = 'KuraSzybujaca';
+            if (player.crouching) s = 'KuraKlucanie';
+            drawS(s, -20, -player.h/2, 40, player.h); 
+            if(player.shieldTimer > 0) { ctx.globalAlpha = 0.4; drawS('tarcza', -25, -25, 50, 50); ctx.globalAlpha = 1; }
+            ctx.restore();
+
+            drawS('zebatka', 740, 15, 45, 45);
+            ctx.fillStyle = "black"; ctx.font = "bold 20px Arial"; ctx.textAlign = "left";
+            ctx.fillText("PKT: " + player.score, 25, 45);
+            let tY = 85;
+            if(player.shieldTimer > 0) { drawS('zegar', 25, tY, 30, 30); ctx.fillStyle = "blue"; ctx.fillText("TARCZA: " + Math.ceil(player.shieldTimer/60) + "s", 65, tY + 22); tY += 40; }
+            if(player.jumpBoostTimer > 0) { drawS('zegar', 25, tY, 30, 30); ctx.fillStyle = "orange"; ctx.fillText("SKOK: " + Math.ceil(player.jumpBoostTimer/60) + "s", 65, tY + 22); }
+
+            if (isPaused) {
+                ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.fillRect(0,0,800,600); ctx.fillStyle = "white"; ctx.textAlign = "center";
+                ctx.font = "bold 30px Arial"; ctx.fillText("PAUZA", 400, 150); ctx.font = "18px Arial"; ctx.fillText("A/D - Ruch | Spacja - Skok | S - Kuc | W - Lot", 400, 220);
+                ctx.fillStyle = "#2ecc71"; ctx.fillRect(300, 380, 200, 50); ctx.fillStyle = "#e74c3c"; ctx.fillRect(300, 450, 200, 50);
+                ctx.fillStyle = "white"; ctx.fillText("WZNÓW", 400, 412); ctx.fillText("WYJDŹ", 400, 482);
+            }
+        }
+        requestAnimationFrame(draw);
+    }
+    function drawS(n, x, y, w, h) { if (assets[n] && assets[n].complete) ctx.drawImage(assets[n], x, y, w, h); else { ctx.fillStyle = "magenta"; ctx.fillRect(x, y, w, h); }}
+    draw();
 </script>
 </body>
 </html>
