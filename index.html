@@ -16,102 +16,76 @@
     const ctx = canvas.getContext("2d");
     const TILE_SIZE = 40;
 
-    // ==========================================================
-    // --- 1. SYSTEM BRUTE-FORCE (Wyszukuje pliki do skutku!) ---
-    // ==========================================================
+    // --- 1. SYSTEM OMIJANIA BŁĘDÓW (GRA ODPALI SIĘ ZAWSZE) ---
     const assets = {};
     const assetDef = {
-        'KuraStojaca': ['postac', 'KuraStojaca.png'], 'KuraChodzaca': ['postac', 'KuraChodzaca.png'], 
-        'KuraSkok': ['postac', 'KuraSkok.png'], 'KuraSzybujaca': ['postac', 'KuraSzybujaca.png'], 
-        'KuraKlucanie': ['postac', 'KuraKlucanie.png'], 'kuraNuggets': ['postac', 'kuraNuggets.png'], 'kurczak': ['postac', 'kurczak.png'],
+        'KuraStojaca': 'postac/KuraStojaca.png', 'KuraChodzaca': 'postac/KuraChodzaca.png', 
+        'KuraSkok': 'postac/KuraSkok.png', 'KuraSzybujaca': 'postac/KuraSzybujaca.png', 
+        'KuraKlucanie': 'postac/KuraKlucanie.png', 'kuraNuggets': 'postac/kuraNuggets.png', 'kurczak': 'postac/kurczak.png',
         
-        'trawa': ['bloki', 'trawa.png'], 'ziemia': ['bloki', 'ziemia.png'], 'kamien': ['bloki', 'kamien.png'], 
-        'drewno': ['bloki', 'drewno.png'], 'lod': ['bloki', 'lod.png'], 'piasek': ['bloki', 'piasek.png'], 
-        'void': ['bloki', 'void.png'], 'woda': ['bloki', 'woda.png'],
+        'trawa': 'bloki/trawa.png', 'ziemia': 'bloki/ziemia.png', 'kamien': 'bloki/kamien.png', 
+        'drewno': 'bloki/drewno.png', 'lod': 'bloki/lod.png', 'piasek': 'bloki/piasek.png', 
+        'void': 'bloki/void.png', 'woda': 'bloki/woda.png',
         
-        'lawa': ['hazard', 'lawa.png'], 'kolec': ['hazard', 'kolec.png'], 'blokkolcow': ['hazard', 'blokkolcow.png'],
+        'lawa': 'hazard/lawa.png', 'kolec': 'hazard/kolec.png', 'blokkolcow': 'hazard/blokkolcow.png',
         
-        'checkPoint': ['mechanika', 'checkPoint.png'], 'portal': ['mechanika', 'portal.png'], 
-        'rura': ['mechanika', 'rura.png'], 'Ziarna': ['mechanika', 'Ziarna.png'], 
-        'tarcza': ['mechanika', 'tarcza.png'], 'strzalkaSkoku': ['mechanika', 'strzalkaSkoku.png'],
+        'checkPoint': 'mechanika/checkPoint.png', 'portal': 'mechanika/portal.png', 
+        'rura': 'mechanika/rura.png', 'Ziarna': 'mechanika/Ziarna.png', 
+        'tarcza': 'mechanika/tarcza.png', 'strzalkaSkoku': 'mechanika/strzalkaSkoku.png',
         
-        'niebo': ['dekoracje', 'niebo.png'], 'slonce': ['dekoracje', 'slonce.png'], 'chmura': ['dekoracje', 'chmura.png'], 
-        'kwiat': ['dekoracje', 'kwiat.png'], 'krzak': ['dekoracje', 'krzak.png'], 'krazkowocow': ['dekoracje', 'krazkowocow.png'], 
-        'liscie': ['dekoracje', 'liscie.png'], 'maledrzewo': ['dekoracje', 'maledrzewo.png'], 
-        'duzedrzewo': ['dekoracje', 'duzedrzewo.png'], 'samotnyKamien': ['dekoracje', 'samotnyKamien.png'],
+        'niebo': 'dekoracje/niebo.png', 'slonce': 'dekoracje/slonce.png', 'chmura': 'dekoracje/chmura.png', 
+        'kwiat': 'dekoracje/kwiat.png', 'krzak': 'dekoracje/krzak.png', 'krazkowocow': 'dekoracje/krazkowocow.png', 
+        'liscie': 'dekoracje/liscie.png', 'maledrzewo': 'dekoracje/maledrzewo.png', 
+        'duzedrzewo': 'dekoracje/duzedrzewo.png', 'samotnyKamien': 'dekoracje/samotnyKamien.png',
         
-        'zebatka': ['ui', 'zebatka.png'], 'zegar': ['ui', 'zegar.png']
+        'zebatka': 'ui/zebatka.png', 'zegar': 'ui/zegar.png'
     };
 
     let loadedCount = 0;
     const totalAssets = Object.keys(assetDef).length;
     let gameState = "LOADING"; 
 
-    // Omijamy Cache GitHuba!
-    const noCache = "?x=" + Date.now();
+    // Losowy numer wymuszający pobranie plików na nowo
+    const noCache = "?ver=" + Date.now();
 
     Object.keys(assetDef).forEach(name => {
-        let dir = assetDef[name][0];
-        let file = assetDef[name][1];
-        let lowerFile = file.toLowerCase();
-
-        // 6 różnych kombinacji, by na 100% znaleźć Twój plik na GitHubie
-        let attempts = [
-            `${dir}/${file}`,               // Standard: bloki/trawa.png
-            `${dir}/${lowerFile}`,          // Małe litery: bloki/trawa.png
-            `${file}`,                      // Luzem: trawa.png
-            `${lowerFile}`,                 // Luzem, małe: trawa.png
-            `${dir}/${dir}/${file}`,        // Zduplikowany folder: bloki/bloki/trawa.png
-            `assets/${dir}/${file}`         // Stary folder assets: assets/bloki/trawa.png
-        ];
-
-        let attemptIndex = 0;
         let img = new Image();
-
-        const tryNext = () => {
-            if (attemptIndex < attempts.length) {
-                img.src = attempts[attemptIndex] + noCache;
-                attemptIndex++;
-            } else {
-                // Jeśli absolutnie nie ma pliku, tworzymy sztuczny zastępczy kwadrat, by GRA DZIAŁAŁA!
-                let c = document.createElement('canvas');
-                c.width = 40; c.height = 40;
-                let cctx = c.getContext('2d');
-                cctx.fillStyle = 'magenta'; cctx.fillRect(0,0,40,40);
-                cctx.fillStyle = 'white'; cctx.font = '10px Arial'; cctx.fillText(name, 2, 20);
-                
-                let fallback = new Image();
-                fallback.src = c.toDataURL();
-                assets[name] = fallback;
-                
-                loadedCount++;
-                if (loadedCount === totalAssets) gameState = "LOBBY";
-            }
-        };
-
+        let defaultPath = assetDef[name];
+        
         img.onload = () => {
             assets[name] = img;
             loadedCount++;
             if (loadedCount === totalAssets) gameState = "LOBBY";
         };
-
-        img.onerror = tryNext;
-        tryNext(); // Odpalamy szukanie!
+        
+        img.onerror = () => {
+            // JEŚLI PLIKU NIE MA, GRA TWORZY SZTUCZNY BLOK I DZIAŁA DALEJ!
+            let c = document.createElement('canvas');
+            c.width = 40; c.height = 40;
+            let cctx = c.getContext('2d');
+            cctx.fillStyle = 'magenta'; cctx.fillRect(0,0,40,40);
+            cctx.fillStyle = 'white'; cctx.font = '10px Arial'; cctx.fillText(name.substring(0,6), 2, 20);
+            
+            let fallback = new Image();
+            fallback.src = c.toDataURL();
+            assets[name] = fallback;
+            
+            loadedCount++;
+            if (loadedCount === totalAssets) gameState = "LOBBY";
+        };
+        
+        img.src = defaultPath + noCache;
     });
 
-    // ==========================================================
     // --- 2. ZMIENNE I STAN GRY ---
-    // ==========================================================
     let isPaused = false, currentLevel = "easy", cameraX = 0, keys = {};
     let progress = { easy: 0, medium: 0, hard: 0 };
-    try { let saved = localStorage.getItem('kokoszka_v1_save'); if (saved) progress = JSON.parse(saved); } catch(e) {}
+    try { let saved = localStorage.getItem('kokoszka_v2_save'); if (saved) progress = JSON.parse(saved); } catch(e) {}
 
     let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
     let player = { x: 0, y: 0, w: 40, h: 40, vx: 0, vy: 0, speed: 5, onGround: false, crouching: false, dead: false, respawnX: 0, respawnY: 0, deathTimer: 0, lastGlide: 0, inWater: false, score: 0, dir: 1, shieldTimer: 0, jumpBoostTimer: 0 };
 
-    // ==========================================================
     // --- 3. GENERATOR ŚWIATA ---
-    // ==========================================================
     function buildLevel(diff) {
         currentLevel = diff;
         let len = diff === 'easy' ? 2250 : (diff === 'medium' ? 4500 : 6750);
@@ -155,9 +129,7 @@
         gameState = "PLAYING"; 
     }
 
-    // ==========================================================
     // --- 4. STEROWANIE I FIZYKA ---
-    // ==========================================================
     window.addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; if (e.key === " " && gameState === "PLAYING" && !isPaused && !player.dead) { let p = player.jumpBoostTimer > 0 ? -18.5 : -12.5; if (player.inWater) player.vy = -6.5; else if (player.onGround) { player.vy = p; player.onGround = false; } } });
     window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
     canvas.addEventListener("mousedown", e => { const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top; if (gameState === "LOBBY") { if (mx > 300 && mx < 500) { if (my > 200 && my < 250) buildLevel('easy'); else if (my > 300 && my < 350) buildLevel('medium'); else if (my > 400 && my < 450) buildLevel('hard'); } } else if (mx > 740 && my < 60 && gameState === "PLAYING") { isPaused = !isPaused; } else if (isPaused && mx > 300 && mx < 500) { if (my > 380 && my < 430) isPaused = false; if (my > 450 && my < 500) gameState = "LOBBY"; } });
@@ -193,28 +165,24 @@
         world.checkpoints.filter(near).forEach(c => { if (collides(player, c)) { player.respawnX = c.x; player.respawnY = c.y - 40; }});
         world.seeds.filter(near).forEach((s) => { if (collides(player, s)) { world.seeds.splice(world.seeds.indexOf(s), 1); player.score += 10; }});
         world.teleports.filter(near).forEach(tp => { if (collides(player, tp)) player.x += 1600; });
-        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v1_save', JSON.stringify(progress)); } catch(e){} }});
+        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v2_save', JSON.stringify(progress)); } catch(e){} }});
     }
 
-    // ==========================================================
     // --- 5. RYSOWANIE GRAFIKI ---
-    // ==========================================================
     function draw() {
         if (gameState === "LOADING") {
             ctx.fillStyle = "#111"; ctx.fillRect(0,0,800,600);
-            
-            // Pasek postępu ładowania!
-            let progressPercent = Math.round((loadedCount / totalAssets) * 100);
+            let p = Math.round((loadedCount / totalAssets) * 100);
             ctx.fillStyle = "#444"; ctx.fillRect(200, 320, 400, 20);
             ctx.fillStyle = "#2ecc71"; ctx.fillRect(200, 320, 400 * (loadedCount / totalAssets), 20);
-
             ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.font = "bold 24px Arial";
-            ctx.fillText(`AGRESYWNE WYSZUKIWANIE PLIKÓW... ${progressPercent}%`, 400, 300);
+            ctx.fillText(`ŁADOWANIE GRY... ${p}%`, 400, 300);
             return;
         }
 
         let bX = -(cameraX * 0.15) % 800; if(isNaN(bX)) bX = 0;
-        drawS('niebo', bX, 0, 800, 600); drawS('niebo', bX+800, 0, 800, 600);
+        if(assets['niebo']) { drawS('niebo', bX, 0, 800, 600); drawS('niebo', bX+800, 0, 800, 600); }
+        else { ctx.fillStyle = "#87CEEB"; ctx.fillRect(0,0,800,600); }
 
         if (gameState === "LOBBY") {
             ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,800,600);
@@ -255,8 +223,7 @@
     }
 
     function drawS(n, x, y, w, h) { 
-        let img = assets[n];
-        if (img) ctx.drawImage(img, x, y, w, h); 
+        if (assets[n]) ctx.drawImage(assets[n], x, y, w, h); 
     }
 
     function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
