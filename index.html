@@ -2,10 +2,10 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Kokoszka Platformer v1.0 - Master Edition</title>
+    <title>Kokoszka Platformer v1.0 - Tryb Detektywa</title>
     <style>
         body { margin: 0; background: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-        canvas { background: #000; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 4px solid #222; image-rendering: pixelated; }
+        canvas { background: #000; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 4px solid #333; image-rendering: pixelated; }
     </style>
 </head>
 <body>
@@ -16,260 +16,68 @@
     const ctx = canvas.getContext("2d");
     const TILE_SIZE = 40;
 
-    // ==========================================================
-    // --- 1. INTELIGENTNY SKANER GRAFIK (Nigdy więcej różu!) ---
-    // ==========================================================
     const assets = {};
-    const assetDef = {
-        'KuraStojaca': { d: 'postac', f: 'KuraStojaca.png' },
-        'KuraChodzaca': { d: 'postac', f: 'KuraChodzaca.png' },
-        'KuraSkok': { d: 'postac', f: 'KuraSkok.png' },
-        'KuraSzybujaca': { d: 'postac', f: 'KuraSzybujaca.png' },
-        'KuraKlucanie': { d: 'postac', f: 'KuraKlucanie.png' },
-        'kuraNuggets': { d: 'postac', f: 'kuraNuggets.png' },
-        'kurczak': { d: 'postac', f: 'kurczak.png' },
-        
-        'trawa': { d: 'bloki', f: 'trawa.png' },
-        'ziemia': { d: 'bloki', f: 'ziemia.png' },
-        'kamien': { d: 'bloki', f: 'kamien.png' },
-        'drewno': { d: 'bloki', f: 'drewno.png' },
-        'lod': { d: 'bloki', f: 'lod.png' },
-        'piasek': { d: 'bloki', f: 'piasek.png' },
-        'void': { d: 'bloki', f: 'void.png' },
-        'woda': { d: 'bloki', f: 'woda.png' },
-        
-        'lawa': { d: 'hazard', f: 'lawa.png' },
-        'kolec': { d: 'hazard', f: 'kolec.png' },
-        'blokkolcow': { d: 'hazard', f: 'blokkolcow.png' },
-        
-        'checkPoint': { d: 'mechanika', f: 'checkPoint.png' },
-        'portal': { d: 'mechanika', f: 'portal.png' },
-        'rura': { d: 'mechanika', f: 'rura.png' },
-        'Ziarna': { d: 'mechanika', f: 'Ziarna.png' },
-        'tarcza': { d: 'mechanika', f: 'tarcza.png' },
-        'strzalkaSkoku': { d: 'mechanika', f: 'strzalkaSkoku.png' },
-        
-        'niebo': { d: 'dekoracje', f: 'niebo.png' },
-        'slonce': { d: 'dekoracje', f: 'slonce.png' },
-        'chmura': { d: 'dekoracje', f: 'chmura.png' },
-        'kwiat': { d: 'dekoracje', f: 'kwiat.png' },
-        'krzak': { d: 'dekoracje', f: 'krzak.png' },
-        'krazkowocow': { d: 'dekoracje', f: 'krazkowocow.png' },
-        'liscie': { d: 'dekoracje', f: 'liscie.png' },
-        'maledrzewo': { d: 'dekoracje', f: 'maledrzewo.png' },
-        'duzedrzewo': { d: 'dekoracje', f: 'duzedrzewo.png' },
-        'samotnyKamien': { d: 'dekoracje', f: 'samotnyKamien.png' },
-        
-        'zebatka': { d: 'ui', f: 'zebatka.png' },
-        'zegar': { d: 'ui', f: 'zegar.png' }
+    const paths = {
+        'KuraStojaca': 'postac/KuraStojaca.png', 'trawa': 'bloki/trawa.png', 'slonce': 'dekoracje/slonce.png',
+        // Ładujemy na próbę tylko 3 najważniejsze pliki, żeby szybko zdiagnozować problem
     };
 
     let loadedCount = 0;
-    const totalAssets = Object.keys(assetDef).length;
+    const totalAssets = Object.keys(paths).length;
     let gameState = "LOADING"; 
+    let failedUrls = []; // Tu będziemy zapisywać błędy!
 
-    Object.keys(assetDef).forEach(name => {
-        let def = assetDef[name];
-        
-        // Ten system spróbuje znaleźć plik w 4 różnych miejscach!
-        let attempts = [
-            `${def.d}/${def.f}`,           // 1. Zgodnie z Twoimi folderami (np. bloki/trawa.png)
-            `./${def.d}/${def.f}`,         // 2. Bezpieczna ścieżka GitHuba
-            `${def.f}`,                    // 3. Jeśli plik leży luzem (bez folderu)
-            `assets/${def.d}/${def.f}`     // 4. Jeśli wsadziłeś to w stary folder assets
-        ];
-        
+    Object.keys(paths).forEach(name => {
         let img = new Image();
-        let attemptIndex = 0;
-        
         img.onload = () => { 
             loadedCount++; 
             if (loadedCount === totalAssets) gameState = "LOBBY"; 
         };
-        
-        img.onerror = () => {
-            attemptIndex++;
-            if (attemptIndex < attempts.length) {
-                // Jeśli nie znalazł, próbuje następnej ścieżki + omija Cache
-                img.src = attempts[attemptIndex] + "?nocache=" + new Date().getTime();
-            } else {
-                console.error("Całkowity brak pliku na GitHubie: " + def.f);
-                loadedCount++; 
-                if (loadedCount === totalAssets) gameState = "LOBBY"; 
-            }
+        img.onerror = () => { 
+            failedUrls.push(img.src); // Zapisujemy PEŁNY adres, z którego przeglądarka próbowała pobrać
+            loadedCount++; 
+            if (loadedCount === totalAssets) gameState = "ERROR_SCREEN"; 
         };
-        
-        // Startujemy wyszukiwanie
-        img.src = attempts[0] + "?nocache=" + new Date().getTime();
+        // Wymuszamy ominięcie pamięci cache
+        img.src = paths[name] + "?v=" + new Date().getTime();
         assets[name] = img;
     });
 
-    // ==========================================================
-    // --- 2. ZMIENNE I STAN GRY ---
-    // ==========================================================
-    let isPaused = false, currentLevel = "easy", cameraX = 0, keys = {};
-    let progress = { easy: 0, medium: 0, hard: 0 };
-    try { let saved = localStorage.getItem('kokoszka_v1_save'); if (saved) progress = JSON.parse(saved); } catch(e) {}
-
-    let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
-    let player = { x: 0, y: 0, w: 40, h: 40, vx: 0, vy: 0, speed: 5, onGround: false, crouching: false, dead: false, respawnX: 0, respawnY: 0, deathTimer: 0, lastGlide: 0, inWater: false, score: 0, dir: 1, shieldTimer: 0, jumpBoostTimer: 0 };
-
-    // ==========================================================
-    // --- 3. GENERATOR ŚWIATA ---
-    // ==========================================================
-    function buildLevel(diff) {
-        currentLevel = diff;
-        let len = diff === 'easy' ? 2250 : (diff === 'medium' ? 4500 : 6750);
-        Object.keys(world).forEach(k => world[k] = []);
-        world.lonelyStone = { x: 1200, y: 480, w: 40, h: 40 };
-
-        for (let i = 0; i < len; i++) {
-            let x = i * TILE_SIZE, gY = 520;
-            if (i === 10) world.decos.push({x, y: 60, id: 'slonce'});
-            if (i % 30 === 0) world.decos.push({x, y: 40 + Math.random()*120, id: 'chmura'});
-            if (i % 40 === 0) world.decos.push({x, y: 0, id: 'liscie'});
-            if (i % 25 === 5) world.decos.push({x, y: gY - 40, id: 'maledrzewo'});
-            if (i % 60 === 30) world.decos.push({x, y: gY - 120, id: 'duzedrzewo'});
-            if (i % 18 === 7) world.decos.push({x, y: gY - 20, id: 'kwiat'});
-            if (i % 22 === 11) world.decos.push({x, y: gY - 20, id: 'krzak'});
-            if (i % 45 === 22) world.decos.push({x, y: gY - 20, id: 'krazkowocow'});
-
-            if (i > 50 && i % 80 < 4 && diff !== 'easy') world.hazards.push({x, y: gY, w: 40, h: 40, id: 'void'});
-            else if (i % 50 > 47) world.waters.push({x, y: gY, w: 40, h: 40, id: 'woda'});
-            else if (i % 35 > 32 && diff !== 'easy') world.tiles.push({x, y: gY, w: 40, h: 40, id: 'lod'});
-            else if (i % 30 > 27 && diff !== 'easy') world.tiles.push({x, y: gY, w: 40, h: 40, id: 'piasek'});
-            else world.tiles.push({x, y: gY, w: 40, h: 40, id: 'trawa'});
-            
-            world.tiles.push({x, y: gY+40, w: 40, h: 40, id: (i%6===0?'kamien':(i%10===0?'drewno':'ziemia'))});
-
-            if (i > 10 && i < len - 20) {
-                if (i % 100 === 0) world.checkpoints.push({x, y: gY - 40, w: 40, h: 40});
-                if (i % 14 === 0) world.seeds.push({x: x+10, y: gY-30, w: 20, h: 20});
-                if (i % 40 === 0) world.tiles.push({x, y: gY-80, w: 40, h: 40, id: 'rura'});
-                if (i % 250 === 20) world.teleports.push({x, y: gY-40, w: 40, h: 40});
-                if (i % 55 === 27) world.hazards.push({x, y: gY-40, w: 40, h: 40, id: 'blokkolcow'});
-                if (i % 35 === 17) world.hazards.push({x, y: gY-40, w: 40, h: 40, id: 'kolec'});
-                if (i % 300 === 150) world.powerups.push({x, y: gY-100, w: 30, h: 30, id: 'tarcza'});
-                if (i % 450 === 250) world.powerups.push({x, y: gY-140, w: 30, h: 30, id: 'strzalkaSkoku'});
-            }
-        }
-        player.x = 100; player.y = 400; player.respawnX = 100; player.respawnY = 400;
-        player.vx = 0; player.vy = 0; player.score = 0; player.dead = false; 
-        player.shieldTimer = 0; player.jumpBoostTimer = 0; cameraX = 0;
-        world.chicks.push({x: (len-5)*TILE_SIZE, y: 485, w: 35, h: 35});
-        gameState = "PLAYING"; 
-    }
-
-    // ==========================================================
-    // --- 4. FIZYKA I UPDATE ---
-    // ==========================================================
-    window.addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; if (e.key === " " && gameState === "PLAYING" && !isPaused && !player.dead) { let p = player.jumpBoostTimer > 0 ? -18.5 : -12.5; if (player.inWater) player.vy = -6.5; else if (player.onGround) { player.vy = p; player.onGround = false; } } });
-    window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
-    canvas.addEventListener("mousedown", e => { const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top; if (gameState === "LOBBY") { if (mx > 300 && mx < 500) { if (my > 200 && my < 250) buildLevel('easy'); else if (my > 300 && my < 350) buildLevel('medium'); else if (my > 400 && my < 450) buildLevel('hard'); } } else if (mx > 740 && my < 60 && gameState === "PLAYING") { isPaused = !isPaused; } else if (isPaused && mx > 300 && mx < 500) { if (my > 380 && my < 430) isPaused = false; if (my > 450 && my < 500) gameState = "LOBBY"; } });
-    function collides(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
-
-    function update() {
-        if (gameState !== "PLAYING" || isPaused) return;
-        cameraX += (player.x - 380 - cameraX) * 0.1; if (cameraX < 0) cameraX = 0;
-        if (player.shieldTimer > 0) player.shieldTimer--; if (player.jumpBoostTimer > 0) player.jumpBoostTimer--;
-        if (player.dead) { player.vy += 0.5; player.y += player.vy; player.deathTimer++; if (player.deathTimer > 60) { player.dead = false; player.x = player.respawnX; player.y = player.respawnY; player.vy = 0; player.deathTimer = 0; player.h = 40; } return; }
-
-        const near = (obj) => obj.x > cameraX - 100 && obj.x < cameraX + 900;
-        const activeTiles = world.tiles.filter(near);
-        player.inWater = world.waters.filter(near).some(w => collides(player, w));
-
-        let spd = player.speed; let gr = activeTiles.find(t => collides({...player, y: player.y + 1}, t));
-        if (gr) { if(gr.id === 'lod') spd *= 1.6; if(gr.id === 'piasek') spd *= 0.5; }
-
-        if (keys['s'] && !player.inWater) { if (!player.crouching) { player.h = 24; player.y += 16; player.crouching = true; } } else if (player.crouching) { let tR = { x: player.x, y: player.y - 16, w: player.w, h: 40 }; if (!activeTiles.some(t => collides(tR, t))) { player.h = 40; player.y -= 16; player.crouching = false; } }
-
-        player.vx = 0; if (keys['a']) { player.vx = -spd; player.dir = -1; } if (keys['d']) { player.vx = spd; player.dir = 1; } if (player.inWater) player.vx *= 0.6; player.x += player.vx;
-        activeTiles.forEach(t => { if (collides(player, t)) { if (player.vx > 0) player.x = t.x - player.w; if (player.vx < 0) player.x = t.x + t.w; }});
-
-        let glide = keys['w'] && !player.onGround && !player.inWater && Date.now() - player.lastGlide > 10000; if (glide) { player.vy = 1; player.lastGlide = Date.now(); }
-        player.vy += player.inWater ? 0.22 : (glide ? 0 : 0.65); player.y += player.vy; player.onGround = false;
-        activeTiles.forEach(t => { if (collides(player, t)) { if (player.vy > 0) { player.y = t.y - player.h; player.vy = 0; player.onGround = true; } else if (player.vy < 0) { player.y = t.y + t.h; player.vy = 0; } }});
-
-        if (player.y > 600) player.dead = true;
-        world.hazards.filter(near).forEach(h => { if (collides(player, h) && player.shieldTimer <= 0) { player.dead = true; player.vy = -8.5; }});
-        if (world.lonelyStone && collides(player, world.lonelyStone)) { if (player.vx > 0) player.x = world.lonelyStone.x - player.w; if (player.vx < 0) player.x = world.lonelyStone.x + world.lonelyStone.w; }
-        
-        world.powerups.filter(near).forEach((p) => { if (collides(player, p)) { if (p.id === 'tarcza') player.shieldTimer = 300; if (p.id === 'strzalkaSkoku') player.jumpBoostTimer = 600; world.powerups.splice(world.powerups.indexOf(p), 1); }});
-        world.checkpoints.filter(near).forEach(c => { if (collides(player, c)) { player.respawnX = c.x; player.respawnY = c.y - 40; }});
-        world.seeds.filter(near).forEach((s) => { if (collides(player, s)) { world.seeds.splice(world.seeds.indexOf(s), 1); player.score += 10; }});
-        world.teleports.filter(near).forEach(tp => { if (collides(player, tp)) player.x += 1600; });
-        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v1_save', JSON.stringify(progress)); } catch(e){} }});
-    }
-
-    // ==========================================================
-    // --- 5. RYSOWANIE GRAFIKI ---
-    // ==========================================================
     function draw() {
+        ctx.clearRect(0,0,800,600);
+
         if (gameState === "LOADING") {
-            ctx.fillStyle = "#111"; ctx.fillRect(0,0,800,600);
-            ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.font = "bold 24px Arial";
-            ctx.fillText(`ŁADOWANIE ZASOBÓW... (${loadedCount}/${totalAssets})`, 400, 300);
-            ctx.font = "14px Arial"; ctx.fillStyle = "#aaa";
-            ctx.fillText("Jeśli proces stoi w miejscu, odśwież stronę (CTRL + F5)", 400, 340);
-            return;
+            ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 24px Arial";
+            ctx.fillText(`SPRAWDZANIE PLIKÓW... (${loadedCount}/${totalAssets})`, 400, 300);
+        } 
+        else if (gameState === "ERROR_SCREEN") {
+            ctx.fillStyle = "#220000"; ctx.fillRect(0,0,800,600);
+            ctx.fillStyle = "#ff4444"; ctx.textAlign = "center"; ctx.font = "bold 30px Arial";
+            ctx.fillText("🚨 ZNALEZIONO PROBLEM! 🚨", 400, 100);
+            
+            ctx.fillStyle = "white"; ctx.font = "18px Arial";
+            ctx.fillText("Przeglądarka próbowała pobrać pliki z tych adresów, ale dostała błąd 404:", 400, 160);
+            
+            ctx.fillStyle = "yellow"; ctx.font = "14px Consolas, monospace"; ctx.textAlign = "left";
+            for(let i=0; i<failedUrls.length; i++) {
+                ctx.fillText(failedUrls[i], 50, 220 + (i * 30));
+            }
+            
+            ctx.fillStyle = "#aaa"; ctx.textAlign = "center"; ctx.font = "16px Arial";
+            ctx.fillText("Zrób zrzut ekranu tej strony i wyślij mi go!", 400, 500);
         }
-
-        let bX = -(cameraX * 0.15) % 800; if(isNaN(bX)) bX = 0;
-        drawS('niebo', bX, 0, 800, 600); drawS('niebo', bX+800, 0, 800, 600);
-
-        if (gameState === "LOBBY") {
-            ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,800,600);
-            ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 40px Arial"; ctx.fillText("KOKOSZKA MASTER COLLECTION", 400, 100);
-            ['easy', 'medium', 'hard'].forEach((lv, i) => {
-                ctx.fillStyle = progress[lv] ? "#2ecc71" : "#e67e22"; ctx.fillRect(300, 200 + i*100, 200, 50);
-                ctx.fillStyle = "white"; ctx.font = "bold 20px Arial"; ctx.fillText(`${lv.toUpperCase()} (${progress[lv]}/1)`, 400, 232 + i*100);
-            });
-        } else if (gameState === "PLAYING") {
-            const vL = cameraX - 120, vR = cameraX + 920; const isVis = (o) => o.x > vL && o.x < vR;
-
-            world.decos.filter(isVis).forEach(d => { let w = d.id === 'duzedrzewo' ? 80 : 40; let h = d.id === 'duzedrzewo' ? 120 : 40; drawS(d.id, d.x-cameraX, d.y, w, h); });
-            world.tiles.filter(isVis).forEach(t => drawS(t.id, t.x-cameraX, t.y, 40, 40));
-            world.hazards.filter(isVis).forEach(h => drawS(h.id, h.x-cameraX, h.y, 40, 40));
-            ctx.globalAlpha = 0.6; world.waters.filter(isVis).forEach(w => drawS('woda', w.x-cameraX, w.y, 40, 40)); ctx.globalAlpha = 1;
-            world.seeds.filter(isVis).forEach(s => drawS('Ziarna', s.x-cameraX, s.y, 20, 20));
-            world.powerups.filter(isVis).forEach(p => drawS(p.id, p.x-cameraX, p.y, 30, 30));
-            world.checkpoints.filter(isVis).forEach(cp => drawS('checkPoint', cp.x-cameraX, cp.y, 40, 40));
-            world.chicks.forEach(c => drawS('kurczak', c.x-cameraX, c.y, 35, 35));
-            if(world.lonelyStone && isVis(world.lonelyStone)) drawS('samotnyKamien', world.lonelyStone.x-cameraX, world.lonelyStone.y, 40, 40);
-
-            ctx.save(); ctx.translate(player.x - cameraX + 20, player.y + player.h/2); if (player.dir === -1) ctx.scale(-1, 1);
-            let s = player.dead ? 'kuraNuggets' : (player.vx !== 0 ? 'KuraChodzaca' : 'KuraStojaca');
-            if (!player.onGround && !player.dead) s = 'KuraSkok'; if (keys['w'] && !player.onGround) s = 'KuraSzybujaca'; if (player.crouching) s = 'KuraKlucanie';
-            drawS(s, -20, -player.h/2, 40, player.h); 
-            if(player.shieldTimer > 0) { ctx.globalAlpha = 0.4; drawS('tarcza', -25, -25, 50, 50); ctx.globalAlpha = 1; }
-            ctx.restore();
-
-            drawS('zebatka', 740, 15, 45, 45); ctx.fillStyle = "black"; ctx.font = "bold 20px Arial"; ctx.textAlign = "left"; ctx.fillText("PKT: " + player.score, 25, 45);
-            let tY = 85;
-            if(player.shieldTimer > 0) { drawS('zegar', 25, tY, 30, 30); ctx.fillStyle = "blue"; ctx.fillText("TARCZA: " + Math.ceil(player.shieldTimer/60) + "s", 65, tY + 22); tY += 40; }
-            if(player.jumpBoostTimer > 0) { drawS('zegar', 25, tY, 30, 30); ctx.fillStyle = "orange"; ctx.fillText("SKOK: " + Math.ceil(player.jumpBoostTimer/60) + "s", 65, tY + 22); }
-
-            if (isPaused) { ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.fillRect(0,0,800,600); ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 30px Arial"; ctx.fillText("PAUZA", 400, 150); ctx.font = "18px Arial"; ctx.fillText("A/D - Ruch | Spacja - Skok | S - Kuc | W - Lot", 400, 220); ctx.fillStyle = "#2ecc71"; ctx.fillRect(300, 380, 200, 50); ctx.fillStyle = "#e74c3c"; ctx.fillRect(300, 450, 200, 50); ctx.fillStyle = "white"; ctx.fillText("WZNÓW", 400, 412); ctx.fillText("WYJDŹ", 400, 482); }
-        }
-
-        // --- Znak Wodny ---
-        ctx.fillStyle = "rgba(255, 255, 255, 0.6)"; ctx.font = "bold 14px Arial"; ctx.textAlign = "left"; ctx.fillText("v1.0", 10, 20);
-    }
-
-    function drawS(n, x, y, w, h) { 
-        let img = assets[n];
-        if (img && img.complete && img.naturalHeight !== 0) {
-            ctx.drawImage(img, x, y, w, h); 
-        } else { 
-            ctx.fillStyle = "magenta"; ctx.fillRect(x, y, w, h); 
-            ctx.fillStyle = "white"; ctx.font = "10px Arial"; ctx.fillText(n, x + 2, y + 20);
+        else if (gameState === "LOBBY") {
+            ctx.fillStyle = "#2ecc71"; ctx.fillRect(0,0,800,600);
+            ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 40px Arial";
+            ctx.fillText("SUKCES! PLIKI ZNALEZIONE!", 400, 300);
         }
     }
 
-    function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+    function gameLoop() { draw(); requestAnimationFrame(gameLoop); }
     requestAnimationFrame(gameLoop);
 
 </script>
 </body>
 </html>
+
 
