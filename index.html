@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Kokoszka Platformer v1.0 - Master Edition</title>
+    <title>Kokoszka Platformer v1.0 - Ostateczna Wersja</title>
     <style>
         body { margin: 0; background: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
         canvas { background: #000; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 4px solid #222; image-rendering: pixelated; }
@@ -17,10 +17,11 @@
     const TILE_SIZE = 40;
 
     // ==========================================================
-    // --- 1. PRELOADER Z SYSTEMEM AUTO-NAPRAWY ŚCIEŻEK ---
+    // --- 1. PRELOADER Z NISZCZYCIELEM PAMIĘCI PODRĘCZNEJ ---
     // ==========================================================
     const assets = {};
     const paths = {
+        // Idealnie dopasowane do Twojego zdjęcia z GitHuba
         'KuraStojaca': 'postac/KuraStojaca.png', 'KuraChodzaca': 'postac/KuraChodzaca.png', 
         'KuraSkok': 'postac/KuraSkok.png', 'KuraSzybujaca': 'postac/KuraSzybujaca.png', 
         'KuraKlucanie': 'postac/KuraKlucanie.png', 'kuraNuggets': 'postac/kuraNuggets.png', 'kurczak': 'postac/kurczak.png',
@@ -47,6 +48,9 @@
     const totalAssets = Object.keys(paths).length;
     let gameState = "LOADING"; 
 
+    // Trik, który rozwiązuje problemy z GitHub Pages (Cache Buster)
+    const nocache = "?v=" + new Date().getTime(); 
+
     Object.keys(paths).forEach(name => {
         let img = new Image();
         img.onload = () => { 
@@ -54,23 +58,17 @@
             if (loadedCount === totalAssets) gameState = "LOBBY"; 
         };
         img.onerror = () => { 
-            // MAGIA: Jeśli plik w folderze nie działa, szukaj go luzem (bez folderu)
-            if (!img.retried) {
-                img.retried = true;
-                let fallbackPath = paths[name].split('/').pop(); // Odcina folder, zostawia np. "trawa.png"
-                img.src = fallbackPath;
-            } else {
-                console.error("Całkowity brak pliku: " + paths[name]); 
-                loadedCount++; 
-                if (loadedCount === totalAssets) gameState = "LOBBY"; 
-            }
+            console.error("Dalej brakuje pliku na GitHubie: " + paths[name]); 
+            loadedCount++; 
+            if (loadedCount === totalAssets) gameState = "LOBBY"; 
         };
-        img.src = paths[name];
+        // Wymuszamy pobranie nowej wersji z serwera GitHuba!
+        img.src = paths[name] + nocache;
         assets[name] = img;
     });
 
     // ==========================================================
-    // --- RESZTA LOGIKI (Niezmieniona, idealnie działająca) ---
+    // --- 2. ZMIENNE I STAN GRY ---
     // ==========================================================
     let isPaused = false, currentLevel = "easy", cameraX = 0, keys = {};
     let progress = { easy: 0, medium: 0, hard: 0 };
@@ -79,6 +77,9 @@
     let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
     let player = { x: 0, y: 0, w: 40, h: 40, vx: 0, vy: 0, speed: 5, onGround: false, crouching: false, dead: false, respawnX: 0, respawnY: 0, deathTimer: 0, lastGlide: 0, inWater: false, score: 0, dir: 1, shieldTimer: 0, jumpBoostTimer: 0 };
 
+    // ==========================================================
+    // --- 3. GENERATOR MAP ---
+    // ==========================================================
     function buildLevel(diff) {
         currentLevel = diff;
         let len = diff === 'easy' ? 2250 : (diff === 'medium' ? 4500 : 6750);
@@ -122,11 +123,17 @@
         gameState = "PLAYING"; 
     }
 
+    // ==========================================================
+    // --- 4. STEROWANIE ---
+    // ==========================================================
     window.addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; if (e.key === " " && gameState === "PLAYING" && !isPaused && !player.dead) { let p = player.jumpBoostTimer > 0 ? -18.5 : -12.5; if (player.inWater) player.vy = -6.5; else if (player.onGround) { player.vy = p; player.onGround = false; } } });
     window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
     canvas.addEventListener("mousedown", e => { const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top; if (gameState === "LOBBY") { if (mx > 300 && mx < 500) { if (my > 200 && my < 250) buildLevel('easy'); else if (my > 300 && my < 350) buildLevel('medium'); else if (my > 400 && my < 450) buildLevel('hard'); } } else if (mx > 740 && my < 60 && gameState === "PLAYING") { isPaused = !isPaused; } else if (isPaused && mx > 300 && mx < 500) { if (my > 380 && my < 430) isPaused = false; if (my > 450 && my < 500) gameState = "LOBBY"; } });
     function collides(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
+    // ==========================================================
+    // --- 5. LOGIKA FIZYKI ---
+    // ==========================================================
     function update() {
         if (gameState !== "PLAYING" || isPaused) return;
         cameraX += (player.x - 380 - cameraX) * 0.1; if (cameraX < 0) cameraX = 0;
@@ -160,6 +167,9 @@
         world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v1_save', JSON.stringify(progress)); } catch(e){} }});
     }
 
+    // ==========================================================
+    // --- 6. RYSOWANIE GRAFIK ---
+    // ==========================================================
     function draw() {
         if (gameState === "LOADING") {
             ctx.fillStyle = "#111"; ctx.fillRect(0,0,800,600);
@@ -215,7 +225,7 @@
             ctx.drawImage(img, x, y, w, h); 
         } else { 
             ctx.fillStyle = "magenta"; ctx.fillRect(x, y, w, h); 
-            ctx.fillStyle = "white"; ctx.font = "10px Arial"; ctx.fillText(img ? img.src.split('/').pop() : n, x + 2, y + 20);
+            ctx.fillStyle = "white"; ctx.font = "10px Arial"; ctx.fillText(paths[n], x + 2, y + 20);
         }
     }
 
@@ -225,3 +235,4 @@
 </script>
 </body>
 </html>
+
