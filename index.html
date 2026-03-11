@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Kokoszka Platformer v1.0 - Master Edition</title>
     <style>
-        body { margin: 0; background: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; background: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
         canvas { background: #000; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 4px solid #222; image-rendering: pixelated; }
     </style>
 </head>
@@ -16,29 +16,31 @@
     const ctx = canvas.getContext("2d");
     const TILE_SIZE = 40;
 
-    // --- 1. PRELOADER Z WYMUSZONĄ ŚCIEŻKĄ (Dodałem ./) ---
+    // ==========================================================
+    // --- 1. PRELOADER Z SYSTEMEM AUTO-NAPRAWY ŚCIEŻEK ---
+    // ==========================================================
     const assets = {};
     const paths = {
-        'KuraStojaca': './postac/KuraStojaca.png', 'KuraChodzaca': './postac/KuraChodzaca.png', 
-        'KuraSkok': './postac/KuraSkok.png', 'KuraSzybujaca': './postac/KuraSzybujaca.png', 
-        'KuraKlucanie': './postac/KuraKlucanie.png', 'kuraNuggets': './postac/kuraNuggets.png', 'kurczak': './postac/kurczak.png',
+        'KuraStojaca': 'postac/KuraStojaca.png', 'KuraChodzaca': 'postac/KuraChodzaca.png', 
+        'KuraSkok': 'postac/KuraSkok.png', 'KuraSzybujaca': 'postac/KuraSzybujaca.png', 
+        'KuraKlucanie': 'postac/KuraKlucanie.png', 'kuraNuggets': 'postac/kuraNuggets.png', 'kurczak': 'postac/kurczak.png',
         
-        'trawa': './bloki/trawa.png', 'ziemia': './bloki/ziemia.png', 'kamien': './bloki/kamien.png', 
-        'drewno': './bloki/drewno.png', 'lod': './bloki/lod.png', 'piasek': './bloki/piasek.png', 
-        'void': './bloki/void.png', 'woda': './bloki/woda.png',
+        'trawa': 'bloki/trawa.png', 'ziemia': 'bloki/ziemia.png', 'kamien': 'bloki/kamien.png', 
+        'drewno': 'bloki/drewno.png', 'lod': 'bloki/lod.png', 'piasek': 'bloki/piasek.png', 
+        'void': 'bloki/void.png', 'woda': 'bloki/woda.png',
         
-        'lawa': './hazard/lawa.png', 'kolec': './hazard/kolec.png', 'blokkolcow': './hazard/blokkolcow.png',
+        'lawa': 'hazard/lawa.png', 'kolec': 'hazard/kolec.png', 'blokkolcow': 'hazard/blokkolcow.png',
         
-        'checkPoint': './mechanika/checkPoint.png', 'portal': './mechanika/portal.png', 
-        'rura': './mechanika/rura.png', 'Ziarna': './mechanika/Ziarna.png', 
-        'tarcza': './mechanika/tarcza.png', 'strzalkaSkoku': './mechanika/strzalkaSkoku.png',
+        'checkPoint': 'mechanika/checkPoint.png', 'portal': 'mechanika/portal.png', 
+        'rura': 'mechanika/rura.png', 'Ziarna': 'mechanika/Ziarna.png', 
+        'tarcza': 'mechanika/tarcza.png', 'strzalkaSkoku': 'mechanika/strzalkaSkoku.png',
         
-        'niebo': './dekoracje/niebo.png', 'slonce': './dekoracje/slonce.png', 'chmura': './dekoracje/chmura.png', 
-        'kwiat': './dekoracje/kwiat.png', 'krzak': './dekoracje/krzak.png', 'krazkowocow': './dekoracje/krazkowocow.png', 
-        'liscie': './dekoracje/liscie.png', 'maledrzewo': './dekoracje/maledrzewo.png', 
-        'duzedrzewo': './dekoracje/duzedrzewo.png', 'samotnyKamien': './dekoracje/samotnyKamien.png',
+        'niebo': 'dekoracje/niebo.png', 'slonce': 'dekoracje/slonce.png', 'chmura': 'dekoracje/chmura.png', 
+        'kwiat': 'dekoracje/kwiat.png', 'krzak': 'dekoracje/krzak.png', 'krazkowocow': 'dekoracje/krazkowocow.png', 
+        'liscie': 'dekoracje/liscie.png', 'maledrzewo': 'dekoracje/maledrzewo.png', 
+        'duzedrzewo': 'dekoracje/duzedrzewo.png', 'samotnyKamien': 'dekoracje/samotnyKamien.png',
         
-        'zebatka': './ui/zebatka.png', 'zegar': './ui/zegar.png'
+        'zebatka': 'ui/zebatka.png', 'zegar': 'ui/zegar.png'
     };
 
     let loadedCount = 0;
@@ -47,15 +49,29 @@
 
     Object.keys(paths).forEach(name => {
         let img = new Image();
-        img.onload = () => { loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; };
+        img.onload = () => { 
+            loadedCount++; 
+            if (loadedCount === totalAssets) gameState = "LOBBY"; 
+        };
         img.onerror = () => { 
-            console.error("BRAK PLIKU: " + paths[name]); 
-            loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; 
+            // MAGIA: Jeśli plik w folderze nie działa, szukaj go luzem (bez folderu)
+            if (!img.retried) {
+                img.retried = true;
+                let fallbackPath = paths[name].split('/').pop(); // Odcina folder, zostawia np. "trawa.png"
+                img.src = fallbackPath;
+            } else {
+                console.error("Całkowity brak pliku: " + paths[name]); 
+                loadedCount++; 
+                if (loadedCount === totalAssets) gameState = "LOBBY"; 
+            }
         };
         img.src = paths[name];
         assets[name] = img;
     });
 
+    // ==========================================================
+    // --- RESZTA LOGIKI (Niezmieniona, idealnie działająca) ---
+    // ==========================================================
     let isPaused = false, currentLevel = "easy", cameraX = 0, keys = {};
     let progress = { easy: 0, medium: 0, hard: 0 };
     try { let saved = localStorage.getItem('kokoszka_v1_save'); if (saved) progress = JSON.parse(saved); } catch(e) {}
@@ -193,21 +209,13 @@
         ctx.fillStyle = "rgba(255, 255, 255, 0.6)"; ctx.font = "bold 14px Arial"; ctx.textAlign = "left"; ctx.fillText("v1.0", 10, 20);
     }
 
-    // ==========================================================
-    // --- MAGIA DIAGNOSTYCZNA (PISZE ŚCIEŻKĘ NA RÓŻOWYM TLE) ---
-    // ==========================================================
     function drawS(n, x, y, w, h) { 
         let img = assets[n];
         if (img && img.complete && img.naturalHeight !== 0) {
             ctx.drawImage(img, x, y, w, h); 
         } else { 
-            // Rysuje różowy kwadrat
-            ctx.fillStyle = "magenta"; 
-            ctx.fillRect(x, y, w, h); 
-            // PISZE BIAŁYM TEKSTEM CZEGO SZUKA!
-            ctx.fillStyle = "white";
-            ctx.font = "10px Arial";
-            ctx.fillText(paths[n], x + 2, y + 20);
+            ctx.fillStyle = "magenta"; ctx.fillRect(x, y, w, h); 
+            ctx.fillStyle = "white"; ctx.font = "10px Arial"; ctx.fillText(img ? img.src.split('/').pop() : n, x + 2, y + 20);
         }
     }
 
@@ -217,4 +225,3 @@
 </script>
 </body>
 </html>
-
