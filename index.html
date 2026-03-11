@@ -2,10 +2,10 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Kokoszka Platformer - Ultimate Master Edition</title>
+    <title>Kokoszka Platformer v1.0 - Master Edition</title>
     <style>
-        body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-        canvas { background: #87CEEB; box-shadow: 0 0 60px rgba(0,0,0,1); border: 4px solid #333; image-rendering: pixelated; }
+        body { margin: 0; background: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { background: #000; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 4px solid #222; image-rendering: pixelated; }
     </style>
 </head>
 <body>
@@ -16,109 +16,143 @@
     const ctx = canvas.getContext("2d");
     const TILE_SIZE = 40;
 
-    // --- 1. ŚCIEŻKI DO PLIKÓW (Skonfigurowane pod foldery na Twoim pulpicie) ---
+    // ==========================================================
+    // --- 1. PRELOADER (Ładowanie grafik bez błędów) ---
+    // ==========================================================
     const assets = {};
     const paths = {
         // Postać
         'KuraStojaca': 'postac/KuraStojaca.png', 'KuraChodzaca': 'postac/KuraChodzaca.png', 
         'KuraSkok': 'postac/KuraSkok.png', 'KuraSzybujaca': 'postac/KuraSzybujaca.png', 
         'KuraKlucanie': 'postac/KuraKlucanie.png', 'kuraNuggets': 'postac/kuraNuggets.png', 'kurczak': 'postac/kurczak.png',
-        
-        // Bloki (Twój folder bloki)
+        // Bloki
         'trawa': 'bloki/trawa.png', 'ziemia': 'bloki/ziemia.png', 'kamien': 'bloki/kamien.png', 
         'drewno': 'bloki/drewno.png', 'lod': 'bloki/lod.png', 'piasek': 'bloki/piasek.png', 
         'void': 'bloki/void.png', 'woda': 'bloki/woda.png',
-        
         // Hazard
         'lawa': 'hazard/lawa.png', 'kolec': 'hazard/kolec.png', 'blokkolcow': 'hazard/blokkolcow.png',
-        
         // Mechanika
         'checkPoint': 'mechanika/checkPoint.png', 'portal': 'mechanika/portal.png', 
         'rura': 'mechanika/rura.png', 'Ziarna': 'mechanika/Ziarna.png', 
         'tarcza': 'mechanika/tarcza.png', 'strzalkaSkoku': 'mechanika/strzalkaSkoku.png',
-        
         // Dekoracje
         'niebo': 'dekoracje/niebo.png', 'slonce': 'dekoracje/slonce.png', 'chmura': 'dekoracje/chmura.png', 
         'kwiat': 'dekoracje/kwiat.png', 'krzak': 'dekoracje/krzak.png', 'krazkowocow': 'dekoracje/krazkowocow.png', 
         'liscie': 'dekoracje/liscie.png', 'maledrzewo': 'dekoracje/maledrzewo.png', 
         'duzedrzewo': 'dekoracje/duzedrzewo.png', 'samotnyKamien': 'dekoracje/samotnyKamien.png',
-        
         // UI
         'zebatka': 'ui/zebatka.png', 'zegar': 'ui/zegar.png'
     };
 
+    let loadedCount = 0;
+    const totalAssets = Object.keys(paths).length;
+    let gameState = "LOADING"; 
+
     Object.keys(paths).forEach(name => {
-        assets[name] = new Image();
-        assets[name].src = paths[name]; 
+        let img = new Image();
+        img.onload = () => {
+            loadedCount++;
+            if (loadedCount === totalAssets) {
+                gameState = "LOBBY"; // Wszystko załadowane, idziemy do menu!
+            }
+        };
+        img.onerror = () => {
+            console.error("Błąd ładowania pliku: " + paths[name]);
+            loadedCount++; // Ignorujemy błąd, żeby gra i tak ruszyła
+            if (loadedCount === totalAssets) gameState = "LOBBY";
+        };
+        img.src = paths[name];
+        assets[name] = img;
     });
 
-    // --- 2. STAN GRY ---
-    let gameState = "LOBBY", isPaused = false, currentLevel = "easy";
-    let cameraX = 0, keys = {}, progress = JSON.parse(localStorage.getItem('kokoszka_save_v2')) || { easy: 0, medium: 0, hard: 0 };
-    let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
+    // ==========================================================
+    // --- 2. ZMIENNE I STAN GRY ---
+    // ==========================================================
+    let isPaused = false, currentLevel = "easy", cameraX = 0, keys = {};
+    let progress = { easy: 0, medium: 0, hard: 0 };
     
+    try { let saved = localStorage.getItem('kokoszka_v1_save'); if (saved) progress = JSON.parse(saved); } catch(e) {}
+
+    let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
     let player = { 
         x: 0, y: 0, w: 40, h: 40, vx: 0, vy: 0, speed: 5, onGround: false, crouching: false, dead: false, 
         respawnX: 0, respawnY: 0, deathTimer: 0, lastGlide: 0, inWater: false, score: 0, dir: 1,
         shieldTimer: 0, jumpBoostTimer: 0
     };
 
-    // --- 3. GENERATOR ŚWIATA ---
+    // ==========================================================
+    // --- 3. GENERATOR MAP ---
+    // ==========================================================
     function buildLevel(diff) {
         currentLevel = diff;
         let len = diff === 'easy' ? 2250 : (diff === 'medium' ? 4500 : 6750);
         Object.keys(world).forEach(k => world[k] = []);
         
+        // Samotny kamień (tylko 1!)
         world.lonelyStone = { x: 1200, y: 480, w: 40, h: 40 };
 
         for (let i = 0; i < len; i++) {
-            let x = i * TILE_SIZE, groundY = 520;
+            let x = i * TILE_SIZE, gY = 520;
+            
+            // Dekoracje
             if (i === 10) world.decos.push({x, y: 60, id: 'slonce'});
             if (i % 30 === 0) world.decos.push({x, y: 40 + Math.random()*120, id: 'chmura'});
             if (i % 40 === 0) world.decos.push({x, y: 0, id: 'liscie'});
-            if (i % 25 === 5) world.decos.push({x, y: groundY - 40, id: 'maledrzewo'});
-            if (i % 60 === 30) world.decos.push({x, y: groundY - 120, id: 'duzedrzewo'});
-            if (i % 18 === 7) world.decos.push({x, y: groundY - 20, id: 'kwiat'});
-            if (i % 22 === 11) world.decos.push({x, y: groundY - 20, id: 'krzak'});
-            if (i % 45 === 22) world.decos.push({x, y: groundY - 20, id: 'krazkowocow'});
+            if (i % 25 === 5) world.decos.push({x, y: gY - 40, id: 'maledrzewo'});
+            if (i % 60 === 30) world.decos.push({x, y: gY - 120, id: 'duzedrzewo'});
+            if (i % 18 === 7) world.decos.push({x, y: gY - 20, id: 'kwiat'});
+            if (i % 22 === 11) world.decos.push({x, y: gY - 20, id: 'krzak'});
+            if (i % 45 === 22) world.decos.push({x, y: gY - 20, id: 'krazkowocow'});
 
+            // Bloki podłoża (Lód i Piasek tylko na trudniejszych)
             if (i > 50 && i % 80 < 4 && diff !== 'easy') {
-                world.hazards.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'void'});
+                world.hazards.push({x, y: gY, w: 40, h: 40, id: 'void'});
             } else if (i % 50 > 47) {
-                world.waters.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'woda'});
-            } else if (i % 35 > 32) {
-                world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'lod'});
-            } else if (i % 30 > 27) {
-                world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'piasek'});
+                world.waters.push({x, y: gY, w: 40, h: 40, id: 'woda'});
+            } else if (i % 35 > 32 && diff !== 'easy') {
+                world.tiles.push({x, y: gY, w: 40, h: 40, id: 'lod'});
+            } else if (i % 30 > 27 && diff !== 'easy') {
+                world.tiles.push({x, y: gY, w: 40, h: 40, id: 'piasek'});
             } else {
-                world.tiles.push({x, y: groundY, w: TILE_SIZE, h: TILE_SIZE, id: 'trawa'});
+                world.tiles.push({x, y: gY, w: 40, h: 40, id: 'trawa'});
             }
-            world.tiles.push({x, y: groundY + 40, w: TILE_SIZE, h: TILE_SIZE, id: (i%6===0?'kamien':(i%10===0?'drewno':'ziemia'))});
+            // Ziemia
+            world.tiles.push({x, y: gY+40, w: 40, h: 40, id: (i%6===0?'kamien':(i%10===0?'drewno':'ziemia'))});
 
+            // Mechaniki i Hazardy
             if (i > 10 && i < len - 20) {
-                if (i % 100 === 0) world.checkpoints.push({x, y: groundY - 40, w: TILE_SIZE, h: TILE_SIZE});
-                if (i % 14 === 0) world.seeds.push({x: x+10, y: groundY-30, w: 20, h: 20});
-                if (i % 40 === 0) world.tiles.push({x, y: groundY-80, w: TILE_SIZE, h: TILE_SIZE, id: 'rura'});
-                if (i % 250 === 20) world.teleports.push({x, y: groundY-40, w: TILE_SIZE, h: TILE_SIZE});
-                if (i % 55 === 27) world.hazards.push({x, y: groundY-40, w: TILE_SIZE, h: TILE_SIZE, id: 'blokkolcow'});
-                if (i % 35 === 17) world.hazards.push({x, y: groundY-40, w: TILE_SIZE, h: TILE_SIZE, id: 'kolec'});
+                if (i % 100 === 0) world.checkpoints.push({x, y: gY - 40, w: 40, h: 40});
+                if (i % 14 === 0) world.seeds.push({x: x+10, y: gY-30, w: 20, h: 20});
+                if (i % 40 === 0) world.tiles.push({x, y: gY-80, w: 40, h: 40, id: 'rura'});
+                if (i % 250 === 20) world.teleports.push({x, y: gY-40, w: 40, h: 40});
                 
-                if (i % 300 === 150) world.powerups.push({x, y: groundY-100, w: 30, h: 30, id: 'tarcza'});
-                if (i % 450 === 250) world.powerups.push({x, y: groundY-140, w: 30, h: 30, id: 'strzalkaSkoku'});
+                if (i % 55 === 27) world.hazards.push({x, y: gY-40, w: 40, h: 40, id: 'blokkolcow'});
+                if (i % 35 === 17) world.hazards.push({x, y: gY-40, w: 40, h: 40, id: 'kolec'});
+                
+                if (i % 300 === 150) world.powerups.push({x, y: gY-100, w: 30, h: 30, id: 'tarcza'});
+                if (i % 450 === 250) world.powerups.push({x, y: gY-140, w: 30, h: 30, id: 'strzalkaSkoku'});
             }
         }
+        
+        // Setup startowy
         player.x = 100; player.y = 400; player.respawnX = 100; player.respawnY = 400;
-        world.chicks.push({x: (len-5)*TILE_SIZE, y: 485, w: 35, h: 35});
-        player.score = 0; player.dead = false; gameState = "PLAYING"; cameraX = 0;
+        player.vx = 0; player.vy = 0; player.score = 0; player.dead = false; 
         player.shieldTimer = 0; player.jumpBoostTimer = 0;
+        cameraX = 0;
+        
+        world.chicks.push({x: (len-5)*TILE_SIZE, y: 485, w: 35, h: 35});
+        gameState = "PLAYING"; 
     }
 
+    // ==========================================================
     // --- 4. STEROWANIE ---
+    // ==========================================================
     window.addEventListener("keydown", e => { 
         keys[e.key.toLowerCase()] = true; 
         if (e.key === " " && gameState === "PLAYING" && !isPaused && !player.dead) {
-            let power = player.jumpBoostTimer > 0 ? -18.5 : -12.5; 
-            if (player.inWater) player.vy = -6.5; else if (player.onGround) { player.vy = power; player.onGround = false; }
+            let p = player.jumpBoostTimer > 0 ? -18.5 : -12.5; 
+            if (player.inWater) player.vy = -6.5; 
+            else if (player.onGround) { player.vy = p; player.onGround = false; }
         }
     });
     window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
@@ -131,8 +165,9 @@
                 else if (my > 300 && my < 350) buildLevel('medium');
                 else if (my > 400 && my < 450) buildLevel('hard');
             }
-        } else if (mx > 740 && my < 60) isPaused = !isPaused;
-        else if (isPaused && mx > 300 && mx < 500) {
+        } else if (mx > 740 && my < 60 && gameState === "PLAYING") {
+            isPaused = !isPaused;
+        } else if (isPaused && mx > 300 && mx < 500) {
             if (my > 380 && my < 430) isPaused = false;
             if (my > 450 && my < 500) gameState = "LOBBY";
         }
@@ -140,14 +175,19 @@
 
     function collides(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
-    // --- 5. AKTUALIZACJA LOGIKI ---
+    // ==========================================================
+    // --- 5. LOGIKA GRY (Fizyka i Kolizje) ---
+    // ==========================================================
     function update() {
         if (gameState !== "PLAYING" || isPaused) return;
+        
         cameraX += (player.x - 380 - cameraX) * 0.1;
         if (cameraX < 0) cameraX = 0;
+        
         if (player.shieldTimer > 0) player.shieldTimer--;
         if (player.jumpBoostTimer > 0) player.jumpBoostTimer--;
 
+        // System Śmierci
         if (player.dead) {
             player.vy += 0.5; player.y += player.vy; player.deathTimer++;
             if (player.deathTimer > 60) {
@@ -156,14 +196,17 @@
             } return;
         }
 
+        // Optymalizacja (Tylko blisko kamery)
         const near = (obj) => obj.x > cameraX - 100 && obj.x < cameraX + 900;
         const activeTiles = world.tiles.filter(near);
         player.inWater = world.waters.filter(near).some(w => collides(player, w));
 
+        // Podłoże
         let spd = player.speed;
         let gr = activeTiles.find(t => collides({...player, y: player.y + 1}, t));
         if (gr) { if(gr.id === 'lod') spd *= 1.6; if(gr.id === 'piasek') spd *= 0.5; }
 
+        // Kłucanie
         if (keys['s'] && !player.inWater) {
             if (!player.crouching) { player.h = 24; player.y += 16; player.crouching = true; }
         } else if (player.crouching) {
@@ -171,6 +214,7 @@
             if (!activeTiles.some(t => collides(tR, t))) { player.h = 40; player.y -= 16; player.crouching = false; }
         }
 
+        // Ruch i Kolizje Poziome
         player.vx = 0;
         if (keys['a']) { player.vx = -spd; player.dir = -1; }
         if (keys['d']) { player.vx = spd; player.dir = 1; }
@@ -178,26 +222,44 @@
         player.x += player.vx;
         activeTiles.forEach(t => { if (collides(player, t)) { if (player.vx > 0) player.x = t.x - player.w; if (player.vx < 0) player.x = t.x + t.w; }});
 
+        // Grawitacja, Lot i Kolizje Pionowe
         let glide = keys['w'] && !player.onGround && !player.inWater && Date.now() - player.lastGlide > 10000;
         if (glide) { player.vy = 1; player.lastGlide = Date.now(); }
         player.vy += player.inWater ? 0.22 : (glide ? 0 : 0.65);
         player.y += player.vy; player.onGround = false;
         activeTiles.forEach(t => { if (collides(player, t)) { if (player.vy > 0) { player.y = t.y - player.h; player.vy = 0; player.onGround = true; } else if (player.vy < 0) { player.y = t.y + t.h; player.vy = 0; } }});
 
+        // Śmierć (Void / Kolce)
         if (player.y > 600) player.dead = true;
         world.hazards.filter(near).forEach(h => { if (collides(player, h) && player.shieldTimer <= 0) { player.dead = true; player.vy = -8.5; }});
+        
+        // Samotny Kamień
         if (world.lonelyStone && collides(player, world.lonelyStone)) { if (player.vx > 0) player.x = world.lonelyStone.x - player.w; if (player.vx < 0) player.x = world.lonelyStone.x + world.lonelyStone.w; }
+        
+        // Powerupy i Zbierajki
         world.powerups.filter(near).forEach((p) => { if (collides(player, p)) { if (p.id === 'tarcza') player.shieldTimer = 300; if (p.id === 'strzalkaSkoku') player.jumpBoostTimer = 600; world.powerups.splice(world.powerups.indexOf(p), 1); }});
         world.checkpoints.filter(near).forEach(c => { if (collides(player, c)) { player.respawnX = c.x; player.respawnY = c.y - 40; }});
         world.seeds.filter(near).forEach((s) => { if (collides(player, s)) { world.seeds.splice(world.seeds.indexOf(s), 1); player.score += 10; }});
-        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; localStorage.setItem('kokoszka_save_v2', JSON.stringify(progress)); }});
         world.teleports.filter(near).forEach(tp => { if (collides(player, tp)) player.x += 1600; });
+        
+        // Wygrana
+        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v1_save', JSON.stringify(progress)); } catch(e){} }});
     }
 
-    // --- 6. RYSOWANIE GRAFIKI ---
+    // ==========================================================
+    // --- 6. RYSOWANIE GRAFIK ---
+    // ==========================================================
     function draw() {
-        ctx.clearRect(0,0,800,600);
+        // Tło
+        if (gameState === "LOADING") {
+            ctx.fillStyle = "#111"; ctx.fillRect(0,0,800,600);
+            ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.font = "bold 24px Arial";
+            ctx.fillText(`ŁADOWANIE ZASOBÓW... (${loadedCount}/${totalAssets})`, 400, 300);
+            return; // Zatrzymuje rysowanie reszty
+        }
+
         let bX = -(cameraX * 0.15) % 800;
+        if(isNaN(bX)) bX = 0;
         drawS('niebo', bX, 0, 800, 600); drawS('niebo', bX+800, 0, 800, 600);
 
         if (gameState === "LOBBY") {
@@ -208,21 +270,21 @@
                 ctx.fillStyle = progress[lv] ? "#2ecc71" : "#e67e22"; ctx.fillRect(300, 200 + i*100, 200, 50);
                 ctx.fillStyle = "white"; ctx.font = "bold 20px Arial"; ctx.fillText(`${lv.toUpperCase()} (${progress[lv]}/1)`, 400, 232 + i*100);
             });
-        } else {
-            // BEZPIECZNY FILTR WIDOCZNOŚCI
+        } else if (gameState === "PLAYING") {
             const vL = cameraX - 120, vR = cameraX + 920;
-            const isVisible = (obj) => obj.x > vL && obj.x < vR;
+            const isVis = (o) => o.x > vL && o.x < vR;
 
-            world.decos.filter(isVisible).forEach(d => { let w = d.id === 'duzedrzewo' ? 80 : 40; let h = d.id === 'duzedrzewo' ? 120 : 40; drawS(d.id, d.x-cameraX, d.y, w, h); });
-            world.tiles.filter(isVisible).forEach(t => drawS(t.id, t.x-cameraX, t.y, 40, 40));
-            world.hazards.filter(isVisible).forEach(h => drawS(h.id, h.x-cameraX, h.y, 40, 40));
-            ctx.globalAlpha = 0.6; world.waters.filter(isVisible).forEach(w => drawS('woda', w.x-cameraX, w.y, 40, 40)); ctx.globalAlpha = 1;
-            world.seeds.filter(isVisible).forEach(s => drawS('Ziarna', s.x-cameraX, s.y, 20, 20));
-            world.powerups.filter(isVisible).forEach(p => drawS(p.id, p.x-cameraX, p.y, 30, 30));
-            world.checkpoints.filter(isVisible).forEach(cp => drawS('checkPoint', cp.x-cameraX, cp.y, 40, 40));
+            world.decos.filter(isVis).forEach(d => { let w = d.id === 'duzedrzewo' ? 80 : 40; let h = d.id === 'duzedrzewo' ? 120 : 40; drawS(d.id, d.x-cameraX, d.y, w, h); });
+            world.tiles.filter(isVis).forEach(t => drawS(t.id, t.x-cameraX, t.y, 40, 40));
+            world.hazards.filter(isVis).forEach(h => drawS(h.id, h.x-cameraX, h.y, 40, 40));
+            ctx.globalAlpha = 0.6; world.waters.filter(isVis).forEach(w => drawS('woda', w.x-cameraX, w.y, 40, 40)); ctx.globalAlpha = 1;
+            world.seeds.filter(isVis).forEach(s => drawS('Ziarna', s.x-cameraX, s.y, 20, 20));
+            world.powerups.filter(isVis).forEach(p => drawS(p.id, p.x-cameraX, p.y, 30, 30));
+            world.checkpoints.filter(isVis).forEach(cp => drawS('checkPoint', cp.x-cameraX, cp.y, 40, 40));
             world.chicks.forEach(c => drawS('kurczak', c.x-cameraX, c.y, 35, 35));
-            if(world.lonelyStone) drawS('samotnyKamien', world.lonelyStone.x-cameraX, world.lonelyStone.y, 40, 40);
+            if(world.lonelyStone && isVis(world.lonelyStone)) drawS('samotnyKamien', world.lonelyStone.x-cameraX, world.lonelyStone.y, 40, 40);
 
+            // Kura
             ctx.save(); ctx.translate(player.x - cameraX + 20, player.y + player.h/2); if (player.dir === -1) ctx.scale(-1, 1);
             let s = player.dead ? 'kuraNuggets' : (player.vx !== 0 ? 'KuraChodzaca' : 'KuraStojaca');
             if (!player.onGround && !player.dead) s = 'KuraSkok';
@@ -232,13 +294,16 @@
             if(player.shieldTimer > 0) { ctx.globalAlpha = 0.4; drawS('tarcza', -25, -25, 50, 50); ctx.globalAlpha = 1; }
             ctx.restore();
 
+            // UI
             drawS('zebatka', 740, 15, 45, 45);
             ctx.fillStyle = "black"; ctx.font = "bold 20px Arial"; ctx.textAlign = "left";
             ctx.fillText("PKT: " + player.score, 25, 45);
+            
             let tY = 85;
             if(player.shieldTimer > 0) { drawS('zegar', 25, tY, 30, 30); ctx.fillStyle = "blue"; ctx.fillText("TARCZA: " + Math.ceil(player.shieldTimer/60) + "s", 65, tY + 22); tY += 40; }
             if(player.jumpBoostTimer > 0) { drawS('zegar', 25, tY, 30, 30); ctx.fillStyle = "orange"; ctx.fillText("SKOK: " + Math.ceil(player.jumpBoostTimer/60) + "s", 65, tY + 22); }
 
+            // PAUZA
             if (isPaused) {
                 ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.fillRect(0,0,800,600); ctx.fillStyle = "white"; ctx.textAlign = "center";
                 ctx.font = "bold 30px Arial"; ctx.fillText("PAUZA", 400, 150); ctx.font = "18px Arial"; ctx.fillText("A/D - Ruch | Spacja - Skok | S - Kuc | W - Lot", 400, 220);
@@ -246,18 +311,36 @@
                 ctx.fillStyle = "white"; ctx.fillText("WZNÓW", 400, 412); ctx.fillText("WYJDŹ", 400, 482);
             }
         }
-        requestAnimationFrame(draw);
+
+        // --- ZNAK WODNY (v1.0) ---
+        ctx.fillStyle = "rgba(255, 255, 255, 0.6)"; 
+        ctx.font = "bold 14px Arial"; 
+        ctx.textAlign = "left";
+        ctx.fillText("v1.0", 10, 20);
     }
-    
-    // Zabezpieczenie na wypadek brakującego obrazka
+
+    // Bezpieczne rysowanie (sprawdza czy obrazek istnieje)
     function drawS(n, x, y, w, h) { 
-        if (assets[n] && assets[n].complete && assets[n].naturalHeight !== 0) { 
-            ctx.drawImage(assets[n], x, y, w, h); 
+        let img = assets[n];
+        if (img && img.complete && img.naturalHeight !== 0) {
+            ctx.drawImage(img, x, y, w, h); 
         } else { 
             ctx.fillStyle = "magenta"; ctx.fillRect(x, y, w, h); 
         }
     }
-    draw();
+
+    // ==========================================================
+    // --- 7. GŁÓWNA PĘTLA ---
+    // ==========================================================
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Start
+    requestAnimationFrame(gameLoop);
+
 </script>
 </body>
 </html>
