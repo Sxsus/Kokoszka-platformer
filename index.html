@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kokoszka Platformer v6.0 - Hardcore Parkour</title>
+    <title>Kokoszka Platformer v7.0 - Balanced Edition</title>
     <style>
         body { margin: 0; background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; touch-action: none; }
         canvas { background: #87CEEB; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 2px solid #333; image-rendering: pixelated; max-width: 100vw; max-height: 100vh; object-fit: contain; }
@@ -19,30 +19,30 @@
     const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
     // ==========================================================
-    // --- 1. SYSTEM ŁADOWANIA (.PNG) - BEZ RÓŻOWEGO EKRANU ---
+    // --- 1. SUPER ŁADOWANIE (Wykrywa duże i małe litery!) ---
     // ==========================================================
     const assets = {};
     const assetDef = {
-        'KuraStojaca': 'postac/KuraStojaca.png', 'KuraChodzaca': 'postac/KuraChodzaca.png', 
-        'KuraSkok': 'postac/KuraSkok.png', 'KuraSzybujaca': 'postac/KuraSzybujaca.png', 
-        'KuraKlucanie': 'postac/KuraKlucanie.png', 'kuraNuggets': 'postac/kuraNuggets.png', 'kurczak': 'postac/kurczak.png',
+        'KuraStojaca': {d:'postac', f:'KuraStojaca'}, 'KuraChodzaca': {d:'postac', f:'KuraChodzaca'}, 
+        'KuraSkok': {d:'postac', f:'KuraSkok'}, 'KuraSzybujaca': {d:'postac', f:'KuraSzybujaca'}, 
+        'KuraKlucanie': {d:'postac', f:'KuraKlucanie'}, 'kuraNuggets': {d:'postac', f:'kuraNuggets'}, 'kurczak': {d:'postac', f:'kurczak'},
         
-        'trawa': 'bloki/trawa.png', 'ziemia': 'bloki/ziemia.png', 'kamien': 'bloki/kamien.png', 
-        'drewno': 'bloki/drewno.png', 'lod': 'bloki/lod.png', 'piasek': 'bloki/piasek.png', 
-        'void': 'bloki/void.png', 'woda': 'bloki/woda.png',
+        'trawa': {d:'bloki', f:'trawa'}, 'ziemia': {d:'bloki', f:'ziemia'}, 'kamien': {d:'bloki', f:'kamien'}, 
+        'drewno': {d:'bloki', f:'drewno'}, 'lod': {d:'bloki', f:'lod'}, 'piasek': {d:'bloki', f:'piasek'}, 
+        'void': {d:'bloki', f:'void'}, 'woda': {d:'bloki', f:'woda'},
         
-        'lawa': 'hazard/lawa.png', 'kolec': 'hazard/kolec.png', 'blokkolcow': 'hazard/blokkolcow.png',
+        'lawa': {d:'hazard', f:'lawa'}, 'kolec': {d:'hazard', f:'kolec'}, 'blokkolcow': {d:'hazard', f:'blokkolcow'},
         
-        'checkPoint': 'mechanika/checkPoint.png', 'portal': 'mechanika/portal.png', 
-        'rura': 'mechanika/rura.png', 'Ziarna': 'mechanika/Ziarna.png', 
-        'tarcza': 'mechanika/tarcza.png', 'strzalkaSkoku': 'mechanika/strzalkaSkoku.png',
+        'checkPoint': {d:'mechanika', f:'checkPoint'}, 'portal': {d:'mechanika', f:'portal'}, 
+        'rura': {d:'mechanika', f:'rura'}, 'Ziarna': {d:'mechanika', f:'Ziarna'}, 
+        'tarcza': {d:'mechanika', f:'tarcza'}, 'strzalkaSkoku': {d:'mechanika', f:'strzalkaSkoku'},
         
-        'niebo': 'dekoracje/niebo.png', 'slonce': 'dekoracje/slonce.png', 'chmura': 'dekoracje/chmura.png', 
-        'kwiat': 'dekoracje/kwiat.png', 'krzak': 'dekoracje/krzak.png', 'krazkowocow': 'dekoracje/krazkowocow.png', 
-        'liscie': 'dekoracje/liscie.png', 'maledrzewo': 'dekoracje/maledrzewo.png', 
-        'duzedrzewo': 'dekoracje/duzedrzewo.png', 'samotnyKamien': 'dekoracje/samotnyKamien.png',
+        'niebo': {d:'dekoracje', f:'niebo'}, 'slonce': {d:'dekoracje', f:'slonce'}, 'chmura': {d:'dekoracje', f:'chmura'}, 
+        'kwiat': {d:'dekoracje', f:'kwiat'}, 'krzak': {d:'dekoracje', f:'krzak'}, 'krazkowocow': {d:'dekoracje', f:'krazkowocow'}, 
+        'liscie': {d:'dekoracje', f:'liscie'}, 'maledrzewo': {d:'dekoracje', f:'maledrzewo'}, 
+        'duzedrzewo': {d:'dekoracje', f:'duzedrzewo'}, 'samotnyKamien': {d:'dekoracje', f:'samotnyKamien'},
         
-        'zebatka': 'ui/zebatka.png', 'zegar': 'ui/zegar.png'
+        'zebatka': {d:'ui', f:'zebatka'}, 'zegar': {d:'ui', f:'zegar'}
     };
 
     let loadedCount = 0;
@@ -50,30 +50,47 @@
     let gameState = "LOADING"; 
     let pauseMenuState = "MAIN";
 
-    // Unikamy Cache!
-    const noCache = "?ver=" + Date.now();
-
     Object.keys(assetDef).forEach(name => {
+        let dir = assetDef[name].d;
+        let file = assetDef[name].f;
+        let dirUpper = dir.charAt(0).toUpperCase() + dir.slice(1); // Np. "Bloki"
+        let fileUpper = file.charAt(0).toUpperCase() + file.slice(1); // Np. "Trawa"
+
+        // Szuka plików na WSZYSTKIE możliwe sposoby
+        let attempts = [
+            `${dir}/${file}.png`,
+            `${dirUpper}/${file}.png`,
+            `${dir}/${fileUpper}.png`,
+            `${dirUpper}/${fileUpper}.png`,
+            `${file}.png`
+        ];
+
+        let attemptIndex = 0;
         let img = new Image();
-        img.onload = () => { assets[name] = img; loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; };
-        img.onerror = () => {
-            // BRAK RÓŻU - Rysujemy zastępczy ładny blok z nazwą, żeby dało się normalnie grać
-            let c = document.createElement('canvas'); c.width = 40; c.height = 40;
-            let cctx = c.getContext('2d');
-            if (name.includes('trawa') || name.includes('krzak')) cctx.fillStyle = '#2ecc71'; 
-            else if (name.includes('ziemia') || name.includes('drewno')) cctx.fillStyle = '#8e44ad'; 
-            else if (name.includes('woda') || name.includes('lod')) cctx.fillStyle = '#3498db'; 
-            else if (name.includes('lawa') || name.includes('kolec')) cctx.fillStyle = '#e74c3c'; 
-            else if (name.includes('Kura')) cctx.fillStyle = '#f1c40f'; 
-            else cctx.fillStyle = '#7f8c8d'; 
-            
-            cctx.fillRect(0,0,40,40);
-            cctx.fillStyle = 'rgba(255,255,255,0.7)'; cctx.font = '9px Arial'; cctx.fillText(name.substring(0,6), 2, 20);
-            assets[name] = c; 
-            loadedCount++;
-            if (loadedCount === totalAssets) gameState = "LOBBY";
+
+        const tryNext = () => {
+            if (attemptIndex < attempts.length) {
+                img.src = attempts[attemptIndex] + "?v=" + Date.now(); 
+                attemptIndex++;
+            } else {
+                let c = document.createElement('canvas'); c.width = 40; c.height = 40;
+                let cctx = c.getContext('2d');
+                if (name.includes('trawa') || name.includes('krzak')) cctx.fillStyle = '#2ecc71'; 
+                else if (name.includes('ziemia') || name.includes('drewno')) cctx.fillStyle = '#8e44ad'; 
+                else if (name.includes('woda') || name.includes('lod')) cctx.fillStyle = '#3498db'; 
+                else if (name.includes('lawa') || name.includes('kolec')) cctx.fillStyle = '#e74c3c'; 
+                else if (name.includes('Kura')) cctx.fillStyle = '#f1c40f'; 
+                else cctx.fillStyle = '#7f8c8d'; 
+                
+                cctx.fillRect(0,0,40,40);
+                cctx.fillStyle = 'rgba(255,255,255,0.8)'; cctx.font = '10px Arial'; cctx.fillText(name.substring(0,6), 2, 20);
+                assets[name] = c; loadedCount++;
+                if (loadedCount === totalAssets) gameState = "LOBBY";
+            }
         };
-        img.src = assetDef[name] + noCache; 
+        img.onload = () => { assets[name] = img; loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; };
+        img.onerror = tryNext;
+        tryNext();
     });
 
     // ==========================================================
@@ -81,7 +98,7 @@
     // ==========================================================
     let isPaused = false, currentLevel = "easy", cameraX = 0, keys = {};
     let progress = { easy: 0, medium: 0, hard: 0 };
-    try { let saved = localStorage.getItem('kokoszka_v6'); if (saved) progress = JSON.parse(saved); } catch(e) {}
+    try { let saved = localStorage.getItem('kokoszka_v7'); if (saved) progress = JSON.parse(saved); } catch(e) {}
 
     let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
     
@@ -92,7 +109,7 @@
     };
 
     // ==========================================================
-    // --- 3. NOWY GENERATOR POZIOMÓW (HARDCORE PARKOUR) ---
+    // --- 3. GENERATOR POZIOMÓW (ZBALANSOWANY) ---
     // ==========================================================
     function buildLevel(diff) {
         currentLevel = diff;
@@ -103,76 +120,75 @@
         let gapCounter = 0;
         let isHard = diff === 'hard';
         let isMed = diff === 'medium';
-        let hazardChance = isHard ? 0.25 : (isMed ? 0.15 : 0.05);
-        let gapChance = isHard ? 0.20 : (isMed ? 0.10 : 0.03);
+        
+        // Szanse i trudności zmniejszone, żeby dało się grać!
+        let hazardChance = isHard ? 0.15 : (isMed ? 0.08 : 0.02);
+        let gapChance = isHard ? 0.08 : (isMed ? 0.04 : 0.0);
+        let maxGap = isHard ? 3 : 2; // Maksymalnie przepaść na 2 lub 3 bloki (bardzo łatwe do przeskoczenia)
 
         for (let i = 0; i < len; i++) {
             let x = i * TILE_SIZE;
             
-            // TŁO - Chmury i Słońce (Nie można po nich skakać)
+            // TŁO
             if (i === 10) world.decos.push({x, y: 60, id: 'slonce'});
             if (i % 30 === 0) world.decos.push({x, y: 40 + Math.random()*120, id: 'chmura'});
 
-            // Bezpieczna strefa startowa i końcowa
+            // Bezpieczna strefa startu/mety
             if (i < 15 || i > len - 10) {
                 world.tiles.push({x, y: 520, w: 40, h: 40, id: 'trawa'});
                 world.tiles.push({x, y: 560, w: 40, h: 40, id: 'ziemia'});
                 continue;
             }
 
-            // --- GENEROWANIE PRZEPAŚCI (PARKOUR NAD LAWĄ) ---
+            // PRZEPAŚCIE (Lawa/Void)
             if (gapCounter > 0) {
                 gapCounter--;
-                // Na dnie przepaści jest lawa lub pustka
                 world.hazards.push({x, y: 560, w: 40, h: 40, id: (Math.random() > 0.5 ? 'lawa' : 'void')});
-                
-                // Tworzenie lewitujących platform w trakcie przepaści
-                if (gapCounter % 2 === 0 || (isHard && gapCounter % 3 === 0)) {
-                     world.tiles.push({x, y: floorY - 40 - Math.random()*80, w: 40, h: 40, id: 'trawa'});
-                }
                 continue;
             }
 
-            // Szansa na rozpoczęcie przepaści
+            // Rozpoczęcie przepaści
             if (Math.random() < gapChance) {
-                gapCounter = isHard ? Math.floor(Math.random() * 6) + 3 : Math.floor(Math.random() * 4) + 2; 
+                gapCounter = maxGap; 
                 continue;
             }
 
-            // --- NORMALNA PODŁOGA ---
+            // PODŁOGA
             world.tiles.push({x, y: floorY, w: 40, h: 40, id: 'trawa'});
             world.tiles.push({x, y: floorY+40, w: 40, h: 40, id: 'ziemia'});
 
-            // --- DEKORACJE JAKO STAŁE BLOKI (MOŻNA PO NICH SKAKAĆ!) ---
+            // 🌿 DEKORACJE JAKO STAŁE BLOKI - MOŻESZ PO NICH SKAKAĆ!
             if (Math.random() < 0.15) {
                 let sDecos = ['krzak', 'kwiat', 'maledrzewo', 'samotnyKamien'];
                 let dec = sDecos[Math.floor(Math.random() * sDecos.length)];
-                world.tiles.push({x, y: floorY - 40, w: 40, h: 40, id: dec}); // Dodane do płytek kolizyjnych!
+                // Wrzucamy do TILES, żeby kura mogła na nich stać
+                world.tiles.push({x, y: floorY - 40, w: 40, h: 40, id: dec}); 
             } else if (Math.random() < 0.05) {
-                world.tiles.push({x, y: floorY - 120, w: 80, h: 120, id: 'duzedrzewo'}); // Duże drzewo jest stałe!
+                // Duże drzewo
+                world.tiles.push({x, y: floorY - 120, w: 80, h: 120, id: 'duzedrzewo'});
             }
 
-            // Woda (nie można stać, można pływać)
+            // WODA (nie jest stałym blokiem, przenika)
             if (Math.random() < 0.05) {
                 world.waters.push({x, y: floorY - 40, w: 40, h: 40, id: 'woda'});
             }
 
-            // Hazardy (Kolce na podłodze)
+            // KOLCE NA ZIEMI
             if (Math.random() < hazardChance) {
                 world.hazards.push({x, y: floorY - 40, w: 40, h: 40, id: 'kolec'});
             }
 
-            // Checkpointy i Moce
+            // CHECKPOINTY I POWERUPY
             if (i % 100 === 0) world.checkpoints.push({x, y: floorY - 40, w: 40, h: 40});
-            if (i % 250 === 100) world.powerups.push({x, y: floorY - 140, w: 30, h: 30, id: 'tarcza'});
-            if (i % 350 === 150) world.powerups.push({x, y: floorY - 140, w: 30, h: 30, id: 'strzalkaSkoku'});
+            if (i % 250 === 100) world.powerups.push({x, y: floorY - 160, w: 30, h: 30, id: 'tarcza'});
+            if (i % 350 === 150) world.powerups.push({x, y: floorY - 160, w: 30, h: 30, id: 'strzalkaSkoku'});
             if (i % 15 === 0) world.seeds.push({x, y: floorY - 80, w: 20, h: 20});
             
-            // Losowe wzniesienia terenu
-            if (Math.random() < 0.1) {
+            // DELIKATNE wzniesienia (Schodki)
+            if (Math.random() < 0.08) {
                 floorY += (Math.random() > 0.5 ? -40 : 40);
                 if (floorY > 520) floorY = 520;
-                if (floorY < 300) floorY = 300;
+                if (floorY < 360) floorY = 360; // Zablokowałem zbyt wysokie schody!
             }
         }
         
@@ -213,7 +229,7 @@
                     if (mx > 300 && mx < 500) {
                         if (my > 340 && my < 390) { 
                             progress = { easy: 0, medium: 0, hard: 0 };
-                            localStorage.setItem('kokoszka_v6', JSON.stringify(progress));
+                            localStorage.setItem('kokoszka_v7', JSON.stringify(progress));
                             alert("Zapis gry wyczyszczony!");
                         }
                         else if (my > 480 && my < 530) { pauseMenuState = "MAIN"; } 
@@ -264,7 +280,7 @@
     function collides(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
     // ==========================================================
-    // --- 5. LOGIKA GRY I FIZYKA ---
+    // --- 5. LOGIKA FIZYKI ---
     // ==========================================================
     function update() {
         if (gameState !== "PLAYING" || isPaused) return;
@@ -276,7 +292,8 @@
         if (player.dead) { player.vy += 0.5; player.y += player.vy; player.deathTimer++; if (player.deathTimer > 60) { player.dead = false; player.x = player.respawnX; player.y = player.respawnY; player.vy = 0; player.deathTimer = 0; player.h = 40; } return; }
 
         const near = (obj) => obj.x > cameraX - 100 && obj.x < cameraX + 900;
-        const activeTiles = world.tiles.filter(near); // WSZYSTKO CO JEST W TILES JEST TERAZ ŚCIANĄ (Nawet drzewa!)
+        // WSZYSTKIE BLOKI W world.tiles SĄ TWARDE (Ziemia, drewno, krzaki, kwiaty, drzewa)
+        const activeTiles = world.tiles.filter(near); 
         player.inWater = world.waters.filter(near).some(w => collides(player, w));
 
         if (keys[' '] && !player.dead) {
@@ -314,11 +331,11 @@
         world.checkpoints.filter(near).forEach(c => { if (collides(player, c)) { player.respawnX = c.x; player.respawnY = c.y - 40; }});
         world.seeds.filter(near).forEach((s) => { if (collides(player, s)) { world.seeds.splice(world.seeds.indexOf(s), 1); player.score += 10; }});
         world.teleports.filter(near).forEach(tp => { if (collides(player, tp)) player.x += 1600; });
-        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v6', JSON.stringify(progress)); } catch(e){} }});
+        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v7', JSON.stringify(progress)); } catch(e){} }});
     }
 
     // ==========================================================
-    // --- 6. RYSOWANIE INTERFEJSU ---
+    // --- 6. RYSOWANIE EKRANU ---
     // ==========================================================
     function draw() {
         if (gameState === "LOADING") {
@@ -327,11 +344,10 @@
             ctx.fillStyle = "#444"; ctx.fillRect(200, 320, 400, 20);
             ctx.fillStyle = "#2ecc71"; ctx.fillRect(200, 320, 400 * (loadedCount / totalAssets), 20);
             ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.font = "bold 24px Arial";
-            ctx.fillText(`TRWA ŁADOWANIE... ${p}%`, 400, 300);
+            ctx.fillText(`ŁADOWANIE PLIKÓW... ${p}%`, 400, 300);
             return;
         }
 
-        // TŁO ZABLOKOWANE (Statyczne)
         ctx.fillStyle = "#87CEEB"; ctx.fillRect(0,0,800,600);
         if(assets['niebo'] && assets['niebo'].width > 50) { ctx.drawImage(assets['niebo'], 0, 0, 800, 600); }
 
@@ -347,13 +363,13 @@
         else if (gameState === "PLAYING") {
             const vL = cameraX - 120, vR = cameraX + 920; const isVis = (o) => o.x > vL && o.x < vR;
 
+            // Rysowanie elementów (Tiles używa t.w i t.h dla wielkich drzew!)
             world.decos.filter(isVis).forEach(d => { drawS(d.id, d.x-cameraX, d.y, 40, 40); });
-            
-            // W V6 tiles używają t.w i t.h, bo drzewo jest duże i stałe!
             world.tiles.filter(isVis).forEach(t => drawS(t.id, t.x-cameraX, t.y, t.w, t.h));
-            
             world.hazards.filter(isVis).forEach(h => drawS(h.id, h.x-cameraX, h.y, h.w, h.h));
+            
             ctx.globalAlpha = 0.6; world.waters.filter(isVis).forEach(w => drawS('woda', w.x-cameraX, w.y, w.w, w.h)); ctx.globalAlpha = 1;
+            
             world.seeds.filter(isVis).forEach(s => drawS('Ziarna', s.x-cameraX, s.y, 20, 20));
             world.powerups.filter(isVis).forEach(p => drawS(p.id, p.x-cameraX, p.y, 30, 30));
             world.checkpoints.filter(isVis).forEach(cp => drawS('checkPoint', cp.x-cameraX, cp.y, 40, 40));
@@ -366,41 +382,40 @@
             if(player.shieldTimer > 0) { ctx.globalAlpha = 0.4; drawS('tarcza', -25, -25, 50, 50); ctx.globalAlpha = 1; }
             ctx.restore();
 
+            // LICZNIKI W LEWYM GÓRNYM ROGU
             drawS('zebatka', 740, 15, 45, 45); 
             ctx.fillStyle = "white"; ctx.font = "bold 22px Arial"; ctx.textAlign = "left"; 
             ctx.fillText("PKT: " + player.score, 25, 45);
             
             let tY = 85;
 
-            // 1. Tarcza 🛡️
+            // Tarcza
             if(player.shieldTimer > 0) { 
-                drawS('zegar', 25, tY, 30, 30); 
-                drawS('tarcza', 60, tY + 4, 22, 22); 
+                drawS('zegar', 25, tY, 30, 30); drawS('tarcza', 60, tY + 4, 22, 22); 
                 ctx.fillStyle = "white"; ctx.font = "bold 20px Arial";
                 ctx.fillText(Math.ceil(player.shieldTimer/60) + "s", 88, tY + 22); 
                 tY += 40; 
             }
 
-            // 2. Skok ⬆️
+            // Skok
             if(player.jumpBoostTimer > 0) { 
-                drawS('zegar', 25, tY, 30, 30); 
-                drawS('strzalkaSkoku', 60, tY + 4, 22, 22); 
+                drawS('zegar', 25, tY, 30, 30); drawS('strzalkaSkoku', 60, tY + 4, 22, 22); 
                 ctx.fillStyle = "white"; ctx.font = "bold 20px Arial";
                 ctx.fillText(Math.ceil(player.jumpBoostTimer/60) + "s", 88, tY + 22); 
                 tY += 40; 
             }
 
-            // 3. Cooldown Szybowania 🪂 (na czerwono)
+            // Szybowanie (Cooldown na czerwono)
             if(player.lastGlide > 0) {
                 let cd = 10 - Math.floor((Date.now() - player.lastGlide) / 1000);
                 if(cd > 0) {
-                    drawS('zegar', 25, tY, 30, 30); 
-                    drawS('KuraSzybujaca', 60, tY + 4, 22, 22); 
+                    drawS('zegar', 25, tY, 30, 30); drawS('KuraSzybujaca', 60, tY + 4, 22, 22); 
                     ctx.fillStyle = "#ff4444"; ctx.font = "bold 20px Arial";
                     ctx.fillText(cd + "s", 88, tY + 22); 
                 }
             }
 
+            // Przyciski dotykowe
             if (isMobile) {
                 ctx.globalAlpha = 0.5;
                 Object.values(mBtns).forEach(b => {
@@ -411,12 +426,11 @@
                 ctx.globalAlpha = 1.0;
             }
 
+            // MENU PAUZY
             if (isPaused) { 
                 ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.fillRect(0,0,800,600); 
-                
                 if (pauseMenuState === "MAIN") {
-                    ctx.fillStyle = "white"; ctx.textAlign = "center"; 
-                    ctx.font = "bold 40px Arial"; ctx.fillText("PAUZA", 400, 100); 
+                    ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 40px Arial"; ctx.fillText("PAUZA", 400, 100); 
                     
                     ctx.fillStyle = "#f1c40f"; ctx.font = "bold 20px Arial"; ctx.fillText("PORADNIK STEROWANIA", 400, 150);
                     ctx.fillStyle = "white"; ctx.font = "18px Arial";
@@ -429,14 +443,13 @@
                     ctx.fillStyle = "#e74c3c"; ctx.fillRect(300, 480, 200, 50); ctx.fillStyle = "white"; ctx.fillText("WYJDŹ DO LOBBY", 400, 512);
                 } 
                 else if (pauseMenuState === "SETTINGS") {
-                    ctx.fillStyle = "white"; ctx.textAlign = "center"; 
-                    ctx.font = "bold 40px Arial"; ctx.fillText("USTAWIENIA", 400, 150); 
+                    ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 40px Arial"; ctx.fillText("USTAWIENIA", 400, 150); 
                     ctx.fillStyle = "#e67e22"; ctx.fillRect(300, 340, 200, 50); ctx.fillStyle = "white"; ctx.font = "bold 18px Arial"; ctx.fillText("ZRESETUJ ZAPIS GRY", 400, 372);
                     ctx.fillStyle = "#95a5a6"; ctx.fillRect(300, 480, 200, 50); ctx.fillStyle = "white"; ctx.fillText("WRÓĆ", 400, 512);
                 }
             }
         }
-        ctx.fillStyle = "rgba(255, 255, 255, 0.6)"; ctx.font = "bold 14px Arial"; ctx.textAlign = "left"; ctx.fillText("v6.0", 10, 20);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.6)"; ctx.font = "bold 14px Arial"; ctx.textAlign = "left"; ctx.fillText("v7.0", 10, 20);
     }
 
     function drawS(n, x, y, w, h) { 
@@ -448,8 +461,3 @@
 </script>
 </body>
 </html>
-
-
-
-
-
