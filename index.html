@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kokoszka Platformer v2.0 - Ostateczna Wersja</title>
+    <title>Kokoszka Platformer v3.0 - Ultimate</title>
     <style>
         body { margin: 0; background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; touch-action: none; }
-        canvas { background: #000; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 2px solid #333; image-rendering: pixelated; max-width: 100vw; max-height: 100vh; object-fit: contain; }
+        canvas { background: #87CEEB; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 2px solid #333; image-rendering: pixelated; max-width: 100vw; max-height: 100vh; object-fit: contain; }
     </style>
 </head>
 <body>
@@ -19,69 +19,76 @@
     const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
     // ==========================================================
-    // --- 1. BEZPIECZNE ŁADOWANIE PLIKÓW ---
+    // --- 1. SYSTEM ŁADOWANIA (TYLKO .PNG, BRAK RÓŻOWEGO) ---
     // ==========================================================
     const assets = {};
-    const paths = {
-        'KuraStojaca': './postac/KuraStojaca.png', 'KuraChodzaca': './postac/KuraChodzaca.png', 
-        'KuraSkok': './postac/KuraSkok.png', 'KuraSzybujaca': './postac/KuraSzybujaca.png', 
-        'KuraKlucanie': './postac/KuraKlucanie.png', 'kuraNuggets': './postac/kuraNuggets.png', 'kurczak': './postac/kurczak.png',
+    const assetDef = {
+        'KuraStojaca': 'postac/KuraStojaca.png', 'KuraChodzaca': 'postac/KuraChodzaca.png', 
+        'KuraSkok': 'postac/KuraSkok.png', 'KuraSzybujaca': 'postac/KuraSzybujaca.png', 
+        'KuraKlucanie': 'postac/KuraKlucanie.png', 'kuraNuggets': 'postac/kuraNuggets.png', 'kurczak': 'postac/kurczak.png',
         
-        'trawa': './bloki/trawa.png', 'ziemia': './bloki/ziemia.png', 'kamien': './bloki/kamien.png', 
-        'drewno': './bloki/drewno.png', 'lod': './bloki/lod.png', 'piasek': './bloki/piasek.png', 
-        'void': './bloki/void.png', 'woda': './bloki/woda.png',
+        'trawa': 'bloki/trawa.png', 'ziemia': 'bloki/ziemia.png', 'kamien': 'bloki/kamien.png', 
+        'drewno': 'bloki/drewno.png', 'lod': 'bloki/lod.png', 'piasek': 'bloki/piasek.png', 
+        'void': 'bloki/void.png', 'woda': 'bloki/woda.png',
         
-        'lawa': './hazard/lawa.png', 'kolec': './hazard/kolec.png', 'blokkolcow': './hazard/blokkolcow.png',
+        'lawa': 'hazard/lawa.png', 'kolec': 'hazard/kolec.png', 'blokkolcow': 'hazard/blokkolcow.png',
         
-        'checkPoint': './mechanika/checkPoint.png', 'portal': './mechanika/portal.png', 
-        'rura': './mechanika/rura.png', 'Ziarna': './mechanika/Ziarna.png', 
-        'tarcza': './mechanika/tarcza.png', 'strzalkaSkoku': './mechanika/strzalkaSkoku.png',
+        'checkPoint': 'mechanika/checkPoint.png', 'portal': 'mechanika/portal.png', 
+        'rura': 'mechanika/rura.png', 'Ziarna': 'mechanika/Ziarna.png', 
+        'tarcza': 'mechanika/tarcza.png', 'strzalkaSkoku': 'mechanika/strzalkaSkoku.png',
         
-        'niebo': './dekoracje/niebo.png', 'slonce': './dekoracje/slonce.png', 'chmura': './dekoracje/chmura.png', 
-        'kwiat': './dekoracje/kwiat.png', 'krzak': './dekoracje/krzak.png', 'krazkowocow': './dekoracje/krazkowocow.png', 
-        'liscie': './dekoracje/liscie.png', 'maledrzewo': './dekoracje/maledrzewo.png', 
-        'duzedrzewo': './dekoracje/duzedrzewo.png', 'samotnyKamien': './dekoracje/samotnyKamien.png',
+        'niebo': 'dekoracje/niebo.png', 'slonce': 'dekoracje/slonce.png', 'chmura': 'dekoracje/chmura.png', 
+        'kwiat': 'dekoracje/kwiat.png', 'krzak': 'dekoracje/krzak.png', 'krazkowocow': 'dekoracje/krazkowocow.png', 
+        'liscie': 'dekoracje/liscie.png', 'maledrzewo': 'dekoracje/maledrzewo.png', 
+        'duzedrzewo': 'dekoracje/duzedrzewo.png', 'samotnyKamien': 'dekoracje/samotnyKamien.png',
         
-        'zebatka': './ui/zebatka.png', 'zegar': './ui/zegar.png'
+        'zebatka': 'ui/zebatka.png', 'zegar': 'ui/zegar.png'
     };
 
     let loadedCount = 0;
-    const totalAssets = Object.keys(paths).length;
+    const totalAssets = Object.keys(assetDef).length;
     let gameState = "LOADING"; 
-    let pauseMenuState = "MAIN"; // MAIN, SETTINGS
+    let pauseMenuState = "MAIN";
 
-    Object.keys(paths).forEach(name => {
+    // Wymuszanie nowych plików (Cache buster)
+    const noCache = "?ver=" + Date.now();
+
+    Object.keys(assetDef).forEach(name => {
         let img = new Image();
-        img.onload = () => {
-            assets[name] = img;
-            loadedCount++;
-            if (loadedCount === totalAssets) gameState = "LOBBY";
-        };
+        img.onload = () => { assets[name] = img; loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; };
         img.onerror = () => {
-            // Jeśli pliku brak, robimy własny kwadracik, by gra działała dalej
+            // ZAMIAST RÓŻOWEGO EKRANU - Naturalne kolory zastępcze!
             let c = document.createElement('canvas'); c.width = 40; c.height = 40;
             let cctx = c.getContext('2d');
-            cctx.fillStyle = 'magenta'; cctx.fillRect(0,0,40,40);
+            if (name.includes('trawa')) cctx.fillStyle = '#2ecc71'; // Zielony
+            else if (name.includes('ziemia') || name.includes('drewno')) cctx.fillStyle = '#8e44ad'; // Brązowawy
+            else if (name.includes('woda') || name.includes('lod')) cctx.fillStyle = '#3498db'; // Niebieski
+            else if (name.includes('lawa') || name.includes('kolec')) cctx.fillStyle = '#e74c3c'; // Czerwony
+            else if (name.includes('Kura')) cctx.fillStyle = '#f1c40f'; // Żółta kura
+            else cctx.fillStyle = '#7f8c8d'; // Szary
+            
+            cctx.fillRect(0,0,40,40);
+            cctx.fillStyle = 'rgba(255,255,255,0.5)'; cctx.font = '10px Arial'; cctx.fillText(name.substring(0,5), 2, 20);
+            
             assets[name] = c; 
             loadedCount++;
             if (loadedCount === totalAssets) gameState = "LOBBY";
         };
-        img.src = paths[name] + "?v=" + Date.now(); // Cache buster
+        // Dodajemy próbę pobrania oryginalnego pliku z .png
+        img.src = assetDef[name] + noCache; 
     });
 
     // ==========================================================
-    // --- 2. STAN GRY I OBIEKTY ---
+    // --- 2. ZMIENNE I MECHANIKA ---
     // ==========================================================
     let isPaused = false, currentLevel = "easy", cameraX = 0, keys = {};
     let progress = { easy: 0, medium: 0, hard: 0 };
-    try { let saved = localStorage.getItem('kokoszka_v2'); if (saved) progress = JSON.parse(saved); } catch(e) {}
+    try { let saved = localStorage.getItem('kokoszka_v3'); if (saved) progress = JSON.parse(saved); } catch(e) {}
 
     let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
     let player = { x: 0, y: 0, w: 40, h: 40, vx: 0, vy: 0, speed: 5, onGround: false, crouching: false, dead: false, respawnX: 0, respawnY: 0, deathTimer: 0, lastGlide: 0, inWater: false, score: 0, dir: 1, shieldTimer: 0, jumpBoostTimer: 0 };
 
-    // ==========================================================
-    // --- 3. GENERATOR ŚWIATA (ZBALANSOWANY) ---
-    // ==========================================================
+    // --- 3. GENERATOR ŚWIATA ---
     function buildLevel(diff) {
         currentLevel = diff;
         let len = diff === 'easy' ? 2250 : (diff === 'medium' ? 4500 : 6750);
@@ -91,7 +98,6 @@
         for (let i = 0; i < len; i++) {
             let x = i * TILE_SIZE, gY = 520;
             
-            // Tło - dekoracje
             if (i === 10) world.decos.push({x, y: 60, id: 'slonce'});
             if (i % 30 === 0) world.decos.push({x, y: 40 + Math.random()*120, id: 'chmura'});
             if (i % 40 === 0) world.decos.push({x, y: 0, id: 'liscie'});
@@ -100,7 +106,6 @@
             if (i % 18 === 7) world.decos.push({x, y: gY - 20, id: 'kwiat'});
             if (i % 22 === 11) world.decos.push({x, y: gY - 20, id: 'krzak'});
 
-            // Podłoże
             if (i > 50 && i % 80 < 4 && diff !== 'easy') world.hazards.push({x, y: gY, w: 40, h: 40, id: 'void'});
             else if (i % 50 > 47) world.waters.push({x, y: gY, w: 40, h: 40, id: 'woda'});
             else if (i % 35 > 32 && diff !== 'easy') world.tiles.push({x, y: gY, w: 40, h: 40, id: 'lod'});
@@ -109,7 +114,6 @@
             
             world.tiles.push({x, y: gY+40, w: 40, h: 40, id: (i%6===0?'kamien':(i%10===0?'drewno':'ziemia'))});
 
-            // Interaktywne
             if (i > 10 && i < len - 20) {
                 if (i % 100 === 0) world.checkpoints.push({x, y: gY - 40, w: 40, h: 40});
                 if (i % 14 === 0) world.seeds.push({x: x+10, y: gY-30, w: 20, h: 20});
@@ -126,8 +130,7 @@
         player.shieldTimer = 0; player.jumpBoostTimer = 0; cameraX = 0;
         world.chicks.push({x: (len-5)*TILE_SIZE, y: 485, w: 35, h: 35});
         gameState = "PLAYING"; 
-        isPaused = false;
-        pauseMenuState = "MAIN";
+        isPaused = false; pauseMenuState = "MAIN";
     }
 
     // ==========================================================
@@ -146,25 +149,24 @@
         } 
         else if (gameState === "PLAYING") {
             if (mx > 740 && my < 60 && !isPaused) {
-                isPaused = true;
-                pauseMenuState = "MAIN";
+                isPaused = true; pauseMenuState = "MAIN"; keys = {}; // reset klawiszy by kura nie uciekła
             } 
             else if (isPaused) {
                 if (pauseMenuState === "MAIN") {
                     if (mx > 300 && mx < 500) {
-                        if (my > 280 && my < 330) { isPaused = false; } // WZNÓW
-                        else if (my > 350 && my < 400) { pauseMenuState = "SETTINGS"; } // USTAWIENIA
-                        else if (my > 420 && my < 470) { gameState = "LOBBY"; isPaused = false; } // WYJDŹ
+                        if (my > 340 && my < 390) { isPaused = false; } // WZNÓW
+                        else if (my > 410 && my < 460) { pauseMenuState = "SETTINGS"; } // USTAWIENIA
+                        else if (my > 480 && my < 530) { gameState = "LOBBY"; isPaused = false; } // WYJDŹ
                     }
                 } 
                 else if (pauseMenuState === "SETTINGS") {
                     if (mx > 300 && mx < 500) {
-                        if (my > 280 && my < 330) { // ZRESETUJ ZAPIS
+                        if (my > 340 && my < 390) { 
                             progress = { easy: 0, medium: 0, hard: 0 };
-                            localStorage.setItem('kokoszka_v2', JSON.stringify(progress));
-                            alert("Zapis gry został zresetowany!");
+                            localStorage.setItem('kokoszka_v3', JSON.stringify(progress));
+                            alert("Zapis gry został wyczyszczony!");
                         }
-                        else if (my > 420 && my < 470) { pauseMenuState = "MAIN"; } // WRÓĆ
+                        else if (my > 480 && my < 530) { pauseMenuState = "MAIN"; } // WRÓĆ
                     }
                 }
             }
@@ -176,7 +178,6 @@
         handleClick((e.clientX - r.left) * (canvas.width / r.width), (e.clientY - r.top) * (canvas.height / r.height));
     });
 
-    // --- DOTYK (MOBILE) ---
     const mBtns = {
         left: {x: 20, y: 480, w: 70, h: 70, text: '⬅️'}, right: {x: 110, y: 480, w: 70, h: 70, text: '➡️'},
         down: {x: 65, y: 560, w: 70, h: 35, text: 'KUC'}, jump: {x: 710, y: 480, w: 70, h: 70, text: 'SKOK'},
@@ -192,9 +193,7 @@
             let tx = (e.touches[i].clientX - r.left) * (canvas.width / r.width);
             let ty = (e.touches[i].clientY - r.top) * (canvas.height / r.height);
 
-            if (e.type === 'touchstart' && i === 0 && (gameState === "LOBBY" || isPaused || (tx > 740 && ty < 60))) {
-                handleClick(tx, ty);
-            }
+            if (e.type === 'touchstart' && i === 0 && (gameState === "LOBBY" || isPaused || (tx > 740 && ty < 60))) handleClick(tx, ty);
 
             if (gameState === "PLAYING" && !isPaused) {
                 if (tx>mBtns.left.x && tx<mBtns.left.x+mBtns.left.w && ty>mBtns.left.y && ty<mBtns.left.y+mBtns.left.h) keys['a'] = true;
@@ -215,7 +214,7 @@
     function collides(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
     // ==========================================================
-    // --- 5. LOGIKA GRY (Fizyka) ---
+    // --- 5. LOGIKA FIZYKI ---
     // ==========================================================
     function update() {
         if (gameState !== "PLAYING" || isPaused) return;
@@ -254,7 +253,7 @@
         world.checkpoints.filter(near).forEach(c => { if (collides(player, c)) { player.respawnX = c.x; player.respawnY = c.y - 40; }});
         world.seeds.filter(near).forEach((s) => { if (collides(player, s)) { world.seeds.splice(world.seeds.indexOf(s), 1); player.score += 10; }});
         world.teleports.filter(near).forEach(tp => { if (collides(player, tp)) player.x += 1600; });
-        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v2', JSON.stringify(progress)); } catch(e){} }});
+        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v3', JSON.stringify(progress)); } catch(e){} }});
     }
 
     // ==========================================================
@@ -267,22 +266,24 @@
             ctx.fillStyle = "#444"; ctx.fillRect(200, 320, 400, 20);
             ctx.fillStyle = "#2ecc71"; ctx.fillRect(200, 320, 400 * (loadedCount / totalAssets), 20);
             ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.font = "bold 24px Arial";
-            ctx.fillText(`ŁADOWANIE... ${p}%`, 400, 300);
+            ctx.fillText(`ŁADOWANIE PLIKÓW... ${p}%`, 400, 300);
             return;
         }
 
-        // TŁO ZABLOKOWANE (Statyczne)
+        // TŁO ZABLOKOWANE (Statyczne - Nie rusza się z kamerą)
         ctx.fillStyle = "#87CEEB"; ctx.fillRect(0,0,800,600);
-        if(assets['niebo']) { ctx.drawImage(assets['niebo'], 0, 0, 800, 600); }
+        if(assets['niebo'] && assets['niebo'].width > 50) { 
+            ctx.drawImage(assets['niebo'], 0, 0, 800, 600); 
+        }
 
         if (gameState === "LOBBY") {
             ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,800,600);
-            ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 40px Arial"; ctx.fillText("KOKOSZKA V2", 400, 100);
+            ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 40px Arial"; ctx.fillText("KOKOSZKA PLATFORMER", 400, 100);
             ['easy', 'medium', 'hard'].forEach((lv, i) => {
                 ctx.fillStyle = progress[lv] ? "#2ecc71" : "#e67e22"; ctx.fillRect(300, 200 + i*100, 200, 50);
                 ctx.fillStyle = "white"; ctx.font = "bold 20px Arial"; ctx.fillText(`${lv.toUpperCase()} (${progress[lv]}/1)`, 400, 232 + i*100);
             });
-            if(isMobile) { ctx.font = "16px Arial"; ctx.fillStyle = "yellow"; ctx.fillText("📱 Wykryto Tryb Mobilny!", 400, 550); }
+            if(isMobile) { ctx.font = "16px Arial"; ctx.fillStyle = "yellow"; ctx.fillText("📱 Sterowanie dotykowe aktywne", 400, 550); }
         } 
         else if (gameState === "PLAYING") {
             const vL = cameraX - 120, vR = cameraX + 920; const isVis = (o) => o.x > vL && o.x < vR;
@@ -309,7 +310,6 @@
             if(player.shieldTimer > 0) { drawS('zegar', 25, tY, 30, 30); ctx.fillStyle = "blue"; ctx.fillText("TARCZA: " + Math.ceil(player.shieldTimer/60) + "s", 65, tY + 22); tY += 40; }
             if(player.jumpBoostTimer > 0) { drawS('zegar', 25, tY, 30, 30); ctx.fillStyle = "orange"; ctx.fillText("SKOK: " + Math.ceil(player.jumpBoostTimer/60) + "s", 65, tY + 22); }
 
-            // DOTYK D-PAD (TYLKO MOBILNIE)
             if (isMobile) {
                 ctx.globalAlpha = 0.5;
                 Object.values(mBtns).forEach(b => {
@@ -320,30 +320,38 @@
                 ctx.globalAlpha = 1.0;
             }
 
-            // MENU PAUZY I USTAWIENIA
+            // MENU PAUZY, USTAWIENIA I PORADNIK
             if (isPaused) { 
                 ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.fillRect(0,0,800,600); 
                 
                 if (pauseMenuState === "MAIN") {
                     ctx.fillStyle = "white"; ctx.textAlign = "center"; 
-                    ctx.font = "bold 30px Arial"; ctx.fillText("PAUZA", 400, 150); 
-                    ctx.font = "18px Arial"; ctx.fillText("A/D - Ruch | Spacja - Skok | S - Kuc | W - Lot", 400, 220); 
+                    ctx.font = "bold 40px Arial"; ctx.fillText("PAUZA", 400, 100); 
                     
-                    ctx.fillStyle = "#2ecc71"; ctx.fillRect(300, 280, 200, 50); ctx.fillStyle = "white"; ctx.fillText("WZNÓW", 400, 312);
-                    ctx.fillStyle = "#3498db"; ctx.fillRect(300, 350, 200, 50); ctx.fillStyle = "white"; ctx.fillText("USTAWIENIA", 400, 382);
-                    ctx.fillStyle = "#e74c3c"; ctx.fillRect(300, 420, 200, 50); ctx.fillStyle = "white"; ctx.fillText("WYJDŹ", 400, 452);
+                    // Poradnik (Guide)
+                    ctx.fillStyle = "#f1c40f"; ctx.font = "bold 20px Arial"; ctx.fillText("PORADNIK STEROWANIA", 400, 150);
+                    ctx.fillStyle = "white"; ctx.font = "18px Arial";
+                    ctx.fillText("➡️ W prawo: [D]", 400, 180);
+                    ctx.fillText("⬅️ W lewo: [A]", 400, 210);
+                    ctx.fillText("⬆️ Skok: [SPACJA]", 400, 240);
+                    ctx.fillText("⬇️ Kucanie: [S]", 400, 270);
+                    ctx.fillText("🪂 Szybowanie (w powietrzu): [W]", 400, 300);
+                    
+                    ctx.fillStyle = "#2ecc71"; ctx.fillRect(300, 340, 200, 50); ctx.fillStyle = "white"; ctx.fillText("WZNÓW", 400, 372);
+                    ctx.fillStyle = "#3498db"; ctx.fillRect(300, 410, 200, 50); ctx.fillStyle = "white"; ctx.fillText("USTAWIENIA", 400, 442);
+                    ctx.fillStyle = "#e74c3c"; ctx.fillRect(300, 480, 200, 50); ctx.fillStyle = "white"; ctx.fillText("WYJDŹ DO LOBBY", 400, 512);
                 } 
                 else if (pauseMenuState === "SETTINGS") {
                     ctx.fillStyle = "white"; ctx.textAlign = "center"; 
-                    ctx.font = "bold 30px Arial"; ctx.fillText("USTAWIENIA", 400, 150); 
+                    ctx.font = "bold 40px Arial"; ctx.fillText("USTAWIENIA", 400, 150); 
                     
-                    ctx.fillStyle = "#e67e22"; ctx.fillRect(300, 280, 200, 50); ctx.fillStyle = "white"; ctx.fillText("ZRESETUJ ZAPIS", 400, 312);
-                    ctx.fillStyle = "#95a5a6"; ctx.fillRect(300, 420, 200, 50); ctx.fillStyle = "white"; ctx.fillText("WRÓĆ", 400, 452);
+                    ctx.fillStyle = "#e67e22"; ctx.fillRect(300, 340, 200, 50); ctx.fillStyle = "white"; ctx.font = "bold 18px Arial"; ctx.fillText("ZRESETUJ ZAPIS GRY", 400, 372);
+                    ctx.fillStyle = "#95a5a6"; ctx.fillRect(300, 480, 200, 50); ctx.fillStyle = "white"; ctx.fillText("WRÓĆ", 400, 512);
                 }
             }
         }
 
-        ctx.fillStyle = "rgba(255, 255, 255, 0.6)"; ctx.font = "bold 14px Arial"; ctx.textAlign = "left"; ctx.fillText("v2.0", 10, 20);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.6)"; ctx.font = "bold 14px Arial"; ctx.textAlign = "left"; ctx.fillText("v3.0", 10, 20);
     }
 
     function drawS(n, x, y, w, h) { 
@@ -356,6 +364,7 @@
 </script>
 </body>
 </html>
+
 
 
 
