@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kokoszka Platformer v12 - Mega Update</title>
+    <title>Kokoszka Platformer v1.1 - Mobile Controls & False Transparency Fix</title>
     <style>
         body { margin: 0; background: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; touch-action: none; }
         canvas { background: #87CEEB; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 4px solid #222; image-rendering: pixelated; max-width: 100vw; max-height: 100vh; object-fit: contain; }
@@ -16,12 +16,12 @@
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
     
-    // POWIĘKSZENIE 1.5x (Z 40 na 60 pikseli!)
+    // NOWA SKALA: Bloki 1.5x (60x60), Kokoszka 2.25x
     const TILE_SIZE = 60; 
     const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
     // ==========================================================
-    // --- 1. SYSTEM GREEN SCREEN & ŁADOWANIE PLIKÓW ---
+    // --- 1. SYSTEM SUPER GREEN SCREEN (ANTY-SIATKA) ---
     // ==========================================================
     const assets = {};
     const basePaths = {
@@ -39,12 +39,12 @@
         'rura': 'mechanika/rura', 'Ziarna': 'mechanika/Ziarna', 
         'tarcza': 'mechanika/tarcza', 'strzalkaSkoku': 'mechanika/strzalkaSkoku',
         
-        'niebo': 'dekoracje/niebo', 'slonce': 'dekoracje/slonce',  // USUNIĘTA CHMURA
+        'niebo': 'dekoracje/niebo', 'slonce': 'dekoracje/slonce',
         'kwiat': 'dekoracje/kwiat', 'krzak': 'dekoracje/krzak', 'krazkowocow': 'dekoracje/krazkowocow', 
         'liscie': 'dekoracje/liscie', 'maledrzewo': 'dekoracje/maledrzewo', 
         'duzedrzewo': 'dekoracje/duzedrzewo', 'samotnyKamien': 'dekoracje/samotnyKamien',
         
-        'zebatka': 'ui/zebatka', 'zegar': 'ui/zegar'
+        'poziomo': 'ui/poziomo.png.png', 'skokk': 'ui/skokk.png.png' // TWOJE NOWE JOYSTICKI
     };
 
     let loadedCount = 0;
@@ -52,7 +52,7 @@
     let gameState = "LOADING"; 
     let pauseMenuState = "MAIN";
 
-    // Funkcja usuwająca szare tło (Green Screen)
+    // Funkcja do usuwania "fałszywej przezroczystości" (siatki)
     function applyGreenScreen(img) {
         let c = document.createElement('canvas');
         c.width = img.width || 60; c.height = img.height || 60;
@@ -62,14 +62,15 @@
         try {
             let imgData = cx.getImageData(0, 0, c.width, c.height);
             let data = imgData.data;
-            // Sprawdzamy kolor lewego górnego piksela (często to jest to szare tło)
+            
+            // Kolor tła ze siatki (często lewy górny piksel)
             let bgR = data[0], bgG = data[1], bgB = data[2], bgA = data[3];
             
-            // Jeśli kolor przypomina szary/srebrny
-            if (bgA > 0 && Math.abs(bgR - bgG) < 25 && Math.abs(bgG - bgB) < 25 && bgR > 50 && bgR < 220) {
+            // Jeśli kolor przypomina szary (np. z siatki)
+            if (bgA > 0 && Math.abs(bgR - bgG) < 20 && Math.abs(bgG - bgB) < 20 && bgR > 50 && bgR < 210) {
                 for (let i = 0; i < data.length; i += 4) {
                     if (Math.abs(data[i] - bgR) < 30 && Math.abs(data[i+1] - bgG) < 30 && Math.abs(data[i+2] - bgB) < 30) {
-                        data[i+3] = 0; // Robi przezroczyste!
+                        data[i+3] = 0; // Usuwa siatkę!
                     }
                 }
                 cx.putImageData(imgData, 0, 0);
@@ -82,11 +83,27 @@
     }
 
     Object.keys(basePaths).forEach(name => {
-        let basePath = basePaths[name];
+        let path = basePaths[name];
+        
+        // Magia dla joysticków: używa dokładnie ich nazw
+        if (name === 'poziomo' || name === 'skokk') {
+            let img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = () => { 
+                assets[name] = applyGreenScreen(img); // Też usuwa siatkę z joysticków!
+                loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; 
+            };
+            img.onerror = () => { loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; };
+            img.src = path + "?v=" + Date.now();
+            return;
+        }
+        
+        // Inne pliki: próbuje `.png.png`, potem `.png`
+        let basePath = path;
         let attempts = [`${basePath}.png.png`, `${basePath}.png`];
         let attemptIndex = 0;
         let img = new Image();
-        img.crossOrigin = "Anonymous"; // Ważne dla Green Screena na GitHubie
+        img.crossOrigin = "Anonymous";
 
         const tryNext = () => {
             if (attemptIndex < attempts.length) {
@@ -94,71 +111,56 @@
                 attemptIndex++;
             } else {
                 let c = document.createElement('canvas'); c.width = 60; c.height = 60; let cctx = c.getContext('2d');
-                if (name.includes('trawa')) cctx.fillStyle = '#2ecc71'; 
-                else if (name.includes('ziemia')) cctx.fillStyle = '#8e44ad'; 
-                else if (name.includes('woda')) cctx.fillStyle = '#3498db'; 
-                else if (name.includes('lawa')) cctx.fillStyle = '#e74c3c'; 
-                else if (name.includes('Kura')) cctx.fillStyle = '#f1c40f'; 
-                else cctx.fillStyle = '#7f8c8d'; 
-                cctx.fillRect(0,0,60,60); 
-                assets[name] = c; loadedCount++;
+                cctx.fillStyle = '#ff00ff'; cctx.fillRect(0,0,60,60); assets[name] = c; loadedCount++;
                 if (loadedCount === totalAssets) gameState = "LOBBY";
             }
         };
-        img.onload = () => { 
-            // Odpalamy magię usuwania tła! (Oprócz tła nieba)
-            if(name !== 'niebo') {
-                assets[name] = applyGreenScreen(img); 
-            } else {
-                assets[name] = img;
-            }
-            loadedCount++; 
-            if (loadedCount === totalAssets) gameState = "LOBBY"; 
-        };
+        img.onload = () => { assets[name] = applyGreenScreen(img); loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; };
         img.onerror = tryNext; tryNext();
     });
 
     // ==========================================================
-    // --- 2. ZMIENNE ---
+    // --- 2. ZMIENNE GRY (v1.1) ---
     // ==========================================================
     let isPaused = false, currentLevel = "easy", cameraX = 0, keys = {};
     let progress = { easy: 0, medium: 0, hard: 0 };
-    try { let saved = localStorage.getItem('kokoszka_v12'); if (saved) progress = JSON.parse(saved); } catch(e) {}
+    try { let saved = localStorage.getItem('kokoszka_v11'); if (saved) progress = JSON.parse(saved); } catch(e) {}
 
     let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
     
-    // Gracz jest 1.5x większy i szybszy!
+    // KURA O WIELE WIĘKSZA (2.25x) i szybsza!
     let player = { 
-        x: 0, y: 0, w: 60, h: 60, vx: 0, vy: 0, speed: 8, onGround: false, crouching: false, dead: false, 
+        x: 0, y: 0, w: 90, h: 90, vx: 0, vy: 0, speed: 10, onGround: false, crouching: false, dead: false, 
         respawnX: 0, respawnY: 0, deathTimer: 0, glideFuel: 0, inWater: false, score: 0, dir: 1, 
         shieldTimer: 0, jumpBoostTimer: 0 
     };
 
     // ==========================================================
-    // --- 3. GENERATOR MAPY (Jeziora 2x1 do 4x1, bloki do dna) ---
+    // --- 3. GENERATOR MAPY (v1.1 - Bloki do dna, duże jeziora) ---
     // ==========================================================
     function buildLevel(diff) {
         currentLevel = diff;
-        let len = diff === 'easy' ? 1500 : (diff === 'medium' ? 3000 : 4500); // Mniej bloków, bo bloki są wielkie
+        let len = diff === 'easy' ? 1500 : (diff === 'medium' ? 3000 : 4500);
         Object.keys(world).forEach(k => world[k] = []);
         
-        let floorY = 420; // Podłoga niżej
+        let floorY = 400; // Podłoga wyżej
         let gapCounter = 0;
         let safeZone = 15; 
         let isHard = diff === 'hard';
         let isMed = diff === 'medium';
         
         let hazardChance = isHard ? 0.15 : (isMed ? 0.08 : 0.02);
-        let gapChance = isHard ? 0.08 : (isMed ? 0.03 : 0.0);
+        let gapChance = isHard ? 0.10 : (isMed ? 0.04 : 0.0);
 
-        // Dodajemy Słońce do dekoracji
-        world.decos.push({x: 600, y: 50, w: 90, h: 90, id: 'slonce'});
+        // Słońce do paralaksy
+        world.decos.push({x: 600, y: 50, w: 100, h: 100, id: 'slonce'});
 
         for (let i = 0; i < len; i++) {
             let x = i * TILE_SIZE;
 
             if (i < 15 || i > len - 15) {
                 world.tiles.push({x, y: floorY, w: TILE_SIZE, h: TILE_SIZE, id: 'trawa'});
+                // Wypełnienie ziemią do samego dna
                 for(let dy = floorY + TILE_SIZE; dy < 1500; dy += TILE_SIZE) {
                     world.tiles.push({x, y: dy, w: TILE_SIZE, h: TILE_SIZE, id: 'ziemia'});
                 }
@@ -179,17 +181,17 @@
 
             if (safeZone > 0) safeZone--;
 
-            // SYSTEM GENEROWANIA JEZIOR WODY (Szerokość 2-4 bloki)
+            // SYSTEM GENEROWANIA DUŻYCH JEZIOR WODY
             if (safeZone <= 0 && Math.random() < 0.05) {
-                let waterWidth = Math.floor(Math.random() * 3) + 2; // Od 2 do 4
+                let waterWidth = Math.floor(Math.random() * 3) + 2; // Szerokość 2-4
                 for(let w = 0; w < waterWidth; w++) {
                     let wx = (i + w) * TILE_SIZE;
-                    world.waters.push({x: wx, y: floorY + 15, w: TILE_SIZE, h: TILE_SIZE, id: 'woda'}); // Lekko wklęsłe
+                    world.waters.push({x: wx, y: floorY + 15, w: TILE_SIZE, h: TILE_SIZE, id: 'woda'}); // Wklęsłe
                     for(let dy = floorY + TILE_SIZE; dy < 1500; dy += TILE_SIZE) {
                         world.tiles.push({x: wx, y: dy, w: TILE_SIZE, h: TILE_SIZE, id: 'ziemia'});
                     }
                 }
-                i += (waterWidth - 1); // Przeskakujemy kursor mapy
+                i += (waterWidth - 1); // Przesuwa kursor mapy
                 safeZone = 2;
                 continue;
             } 
@@ -200,18 +202,18 @@
                 world.tiles.push({x, y: dy, w: TILE_SIZE, h: TILE_SIZE, id: 'ziemia'});
             }
 
-            // KWIATY I KRZAKI (Solidne, można skakać)
+            // Dekoracje STAŁE
             if (Math.random() < 0.15) {
                 let dec = (Math.random() > 0.5) ? 'krzak' : 'kwiat';
                 world.tiles.push({x, y: floorY - TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE, id: dec}); 
             } 
 
-            // DRZEWA (Dekoracje w tle - kura przez nie przenika!)
+            // Drzewa dekoracyjne w tle
             if (Math.random() < 0.05) {
                 if (Math.random() > 0.5) {
-                    world.decos.push({x, y: floorY - 180, w: 120, h: 180, id: 'duzedrzewo'});
+                    world.decos.push({x, y: floorY - 200, w: TILE_SIZE * 2, h: TILE_SIZE * 3, id: 'duzedrzewo'});
                 } else {
-                    world.decos.push({x, y: floorY - 120, w: 80, h: 120, id: 'maledrzewo'});
+                    world.decos.push({x, y: floorY - 140, w: TILE_SIZE * 1.5, h: TILE_SIZE * 2, id: 'maledrzewo'});
                 }
             }
 
@@ -220,10 +222,10 @@
                 safeZone = 2; 
             }
 
-            if (i % 80 === 0) world.checkpoints.push({x, y: floorY - 80, w: TILE_SIZE, h: TILE_SIZE});
-            if (i % 200 === 100) world.powerups.push({x, y: floorY - 200, w: 45, h: 45, id: 'tarcza'});
-            if (i % 250 === 150) world.powerups.push({x, y: floorY - 200, w: 45, h: 45, id: 'strzalkaSkoku'});
-            if (i % 12 === 0) world.seeds.push({x: x+15, y: floorY - 90, w: 30, h: 30});
+            if (i % 80 === 0) world.checkpoints.push({x, y: floorY - 100, w: TILE_SIZE, h: TILE_SIZE});
+            if (i % 200 === 100) world.powerups.push({x, y: floorY - 200, w: 50, h: 50, id: 'tarcza'});
+            if (i % 250 === 150) world.powerups.push({x, y: floorY - 200, w: 50, h: 50, id: 'strzalkaSkoku'});
+            if (i % 12 === 0) world.seeds.push({x: x+TILE_SIZE/4, y: floorY - 100, w: TILE_SIZE/2, h: TILE_SIZE/2});
             
             if (safeZone <= 0 && Math.random() < 0.1) {
                 floorY += (Math.random() > 0.5 ? -TILE_SIZE : TILE_SIZE);
@@ -233,15 +235,15 @@
             }
         }
         
-        player.x = 200; player.y = 300; player.respawnX = 200; player.respawnY = 300;
+        player.x = 300; player.y = 300; player.respawnX = 300; player.respawnY = 300;
         player.vx = 0; player.vy = 0; player.score = 0; player.dead = false; 
         player.shieldTimer = 0; player.jumpBoostTimer = 0; player.glideFuel = 0; cameraX = 0;
-        world.chicks.push({x: (len-5)*TILE_SIZE, y: 380, w: 60, h: 60});
+        world.chicks.push({x: (len-5)*TILE_SIZE, y: 340, w: 90, h: 90});
         gameState = "PLAYING"; isPaused = false; pauseMenuState = "MAIN";
     }
 
     // ==========================================================
-    // --- 4. STEROWANIE ---
+    // --- 4. STEROWANIE & JOYSTICKI (Tylko Mobilne!) ---
     // ==========================================================
     window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
     window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
@@ -270,7 +272,7 @@
                     if (mx > 300 && mx < 500) {
                         if (my > 340 && my < 390) { 
                             progress = { easy: 0, medium: 0, hard: 0 };
-                            localStorage.setItem('kokoszka_v12', JSON.stringify(progress));
+                            localStorage.setItem('kokoszka_v11', JSON.stringify(progress));
                             alert("Zapis gry usunięty!");
                         }
                         else if (my > 480 && my < 530) { pauseMenuState = "MAIN"; } 
@@ -285,10 +287,10 @@
         handleClick((e.clientX - r.left) * (canvas.width / r.width), (e.clientY - r.top) * (canvas.height / r.height));
     });
 
-    const mBtns = {
-        left: {x: 20, y: 480, w: 70, h: 70, text: '⬅️'}, right: {x: 110, y: 480, w: 70, h: 70, text: '➡️'},
-        down: {x: 65, y: 560, w: 70, h: 35, text: 'KUC'}, jump: {x: 710, y: 480, w: 70, h: 70, text: 'SKOK'},
-        glide: {x: 620, y: 480, w: 70, h: 70, text: 'LOT'}
+    // POZYCJE JOYSTICKÓW DLA MOBILNYCH
+    const joysticks = {
+        horizontal: {x: 40, y: 460, w: 100, h: 100}, // poziomo.png.png (Lewy-Prawy)
+        vertical: {x: 660, y: 460, w: 100, h: 100}  // skokk.png.png (Skok-Kucanie)
     };
 
     function handleTouches(e) {
@@ -300,14 +302,26 @@
             let tx = (e.touches[i].clientX - r.left) * (canvas.width / r.width);
             let ty = (e.touches[i].clientY - r.top) * (canvas.height / r.height);
 
+            // Tapy do Menu
             if (e.type === 'touchstart' && i === 0 && (gameState === "LOBBY" || isPaused || (tx > 740 && ty < 60))) handleClick(tx, ty);
 
-            if (gameState === "PLAYING" && !isPaused) {
-                if (tx>mBtns.left.x && tx<mBtns.left.x+mBtns.left.w && ty>mBtns.left.y && ty<mBtns.left.y+mBtns.left.h) keys['a'] = true;
-                if (tx>mBtns.right.x && tx<mBtns.right.x+mBtns.right.w && ty>mBtns.right.y && ty<mBtns.right.y+mBtns.right.h) keys['d'] = true;
-                if (tx>mBtns.down.x && tx<mBtns.down.x+mBtns.down.w && ty>mBtns.down.y && ty<mBtns.down.y+mBtns.down.h) keys['s'] = true;
-                if (tx>mBtns.jump.x && tx<mBtns.jump.x+mBtns.jump.w && ty>mBtns.jump.y && ty<mBtns.jump.y+mBtns.jump.h) keys[' '] = true;
-                if (tx>mBtns.glide.x && tx<mBtns.glide.x+mBtns.glide.w && ty>mBtns.glide.y && ty<mBtns.glide.y+mBtns.glide.h) keys['w'] = true;
+            // Logika Joysticków w grze
+            if (gameState === "PLAYING" && !isPaused && isMobile) {
+                // Horizontal (Lewo-Prawo)
+                let jh = joysticks.horizontal;
+                if (tx > jh.x && tx < jh.x + jh.w && ty > jh.y && ty < jh.y + jh.h) {
+                    let centerX = jh.x + jh.w / 2;
+                    if (tx < centerX - 20) keys['a'] = true; // Lewo
+                    else if (tx > centerX + 20) keys['d'] = true; // Prawo
+                }
+
+                // Vertical (Skok-Kucanie)
+                let jv = joysticks.vertical;
+                if (tx > jv.x && tx < jv.x + jv.w && ty > jv.y && ty < jv.y + jv.h) {
+                    let centerY = jv.y + jv.h / 2;
+                    if (ty < centerY - 20) keys['w'] = true; // Skok (u góry)
+                    else if (ty > centerY + 20) keys['s'] = true; // Kucanie (u dołu)
+                }
             }
         }
     }
@@ -321,7 +335,7 @@
     function collides(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
     // ==========================================================
-    // --- 5. FIZYKA (DOPASOWANA DO 1.5x SKALI) ---
+    // --- 5. FIZYKA (v1.1 DOPASOWANA DO DUŻEJ KURY) ---
     // ==========================================================
     function update() {
         if (gameState !== "PLAYING" || isPaused) return;
@@ -330,39 +344,35 @@
         if (player.shieldTimer > 0) player.shieldTimer--; 
         if (player.jumpBoostTimer > 0) player.jumpBoostTimer--;
         
-        if (player.dead) { player.vy += 0.8; player.y += player.vy; player.deathTimer++; if (player.deathTimer > 60) { player.dead = false; player.x = player.respawnX; player.y = player.respawnY; player.vy = 0; player.deathTimer = 0; player.h = 60; } return; }
+        if (player.dead) { player.vy += 1.2; player.y += player.vy; player.deathTimer++; if (player.deathTimer > 60) { player.dead = false; player.x = player.respawnX; player.y = player.respawnY; player.vy = 0; player.deathTimer = 0; player.h = 90; } return; }
 
         const near = (obj) => obj.x > cameraX - 100 && obj.x < cameraX + 900;
         const activeTiles = world.tiles.filter(near); 
         player.inWater = world.waters.filter(near).some(w => collides(player, w));
 
         // WIĘKSZY SKOK
-        if (keys[' '] && !player.dead) {
-            let p = player.jumpBoostTimer > 0 ? -26 : -20; 
-            if (player.inWater) player.vy = -8; 
+        if ((keys['w'] || keys[' ']) && !player.dead) {
+            let p = player.jumpBoostTimer > 0 ? -28 : -22; 
+            if (player.inWater) player.vy = -10; 
             else if (player.onGround) { player.vy = p; player.onGround = false; }
         }
 
         let spd = player.speed; let gr = activeTiles.find(t => collides({...player, y: player.y + 1}, t));
         if (gr) { if(gr.id === 'lod') spd *= 1.6; if(gr.id === 'piasek') spd *= 0.5; }
 
-        if (keys['s'] && !player.inWater) { if (!player.crouching) { player.h = 36; player.y += 24; player.crouching = true; } } else if (player.crouching) { let tR = { x: player.x, y: player.y - 24, w: player.w, h: 60 }; if (!activeTiles.some(t => collides(tR, t))) { player.h = 60; player.y -= 24; player.crouching = false; } }
+        if (keys['s'] && !player.inWater) { if (!player.crouching) { player.h = 54; player.y += 36; player.crouching = true; } } else if (player.crouching) { let tR = { x: player.x, y: player.y - 36, w: player.w, h: 90 }; if (!activeTiles.some(t => collides(tR, t))) { player.h = 90; player.y -= 36; player.crouching = false; } }
 
         player.vx = 0; if (keys['a']) { player.vx = -spd; player.dir = -1; } if (keys['d']) { player.vx = spd; player.dir = 1; } if (player.inWater) player.vx *= 0.6; player.x += player.vx;
         activeTiles.forEach(t => { if (collides(player, t)) { if (player.vx > 0) player.x = t.x - player.w; if (player.vx < 0) player.x = t.x + t.w; }});
 
-        // SPADOCHRON
+        // SPADOCHRON (w locie trzymaj [W])
         if (player.onGround) player.glideFuel = 50; 
         let isGliding = false;
-        if (keys['w'] && !player.onGround && !player.inWater && player.glideFuel > 0) {
-            if (player.vy > 1.0) player.vy = 1.0; 
-            player.glideFuel--;
-            isGliding = true;
+        if (keys['w'] && !player.onGround && !player.inWater && player.glideFuel > 0 && player.vy > 1) {
+            player.vy = 1.0; player.glideFuel--; isGliding = true;
         }
         
-        if (!isGliding) {
-            player.vy += player.inWater ? 0.3 : 0.95; // Przyspieszona grawitacja dla skali 1.5x
-        }
+        if (!isGliding) { player.vy += player.inWater ? 0.4 : 1.3; } // Grawitacja
         
         player.y += player.vy; player.onGround = false;
         activeTiles.forEach(t => { if (collides(player, t)) { if (player.vy > 0) { player.y = t.y - player.h; player.vy = 0; player.onGround = true; } else if (player.vy < 0) { player.y = t.y + t.h; player.vy = 0; } }});
@@ -378,33 +388,27 @@
             }
         });
         
-        world.checkpoints.filter(near).forEach(c => { if (collides(player, c)) { player.respawnX = c.x; player.respawnY = c.y - 60; }});
+        world.checkpoints.filter(near).forEach(c => { if (collides(player, c)) { player.respawnX = c.x; player.respawnY = c.y - 90; }});
         world.seeds.filter(near).forEach((s) => { if (collides(player, s)) { world.seeds.splice(world.seeds.indexOf(s), 1); player.score += 10; }});
-        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v12', JSON.stringify(progress)); } catch(e){} }});
+        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v11', JSON.stringify(progress)); } catch(e){} }});
     }
 
     // ==========================================================
-    // --- 6. RYSOWANIE ---
+    // --- 6. RYSOWANIE (ANTY-SIATKA, v1.1 Estetyka) ---
     // ==========================================================
     
-    // Funkcja do rysowania tekstu z ładną, retro obwódką!
+    // Funkcja do rysowania tekstu z obwódką
     function drawText(text, x, y, size, color) {
         ctx.font = `bold ${size}px Arial`;
         ctx.textAlign = "left";
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = 4;
-        ctx.strokeText(text, x, y); // Obwódka
-        ctx.fillStyle = color;
-        ctx.fillText(text, x, y);   // Wypełnienie
+        ctx.strokeStyle = "black"; ctx.lineWidth = 4; ctx.strokeText(text, x, y); // Obwódka
+        ctx.fillStyle = color; ctx.fillText(text, x, y); // Wypełnienie
     }
 
     function draw() {
         if (gameState === "LOADING") {
             ctx.fillStyle = "#111"; ctx.fillRect(0,0,800,600);
-            let p = Math.round((loadedCount / totalAssets) * 100);
-            ctx.fillStyle = "#444"; ctx.fillRect(200, 320, 400, 20);
-            ctx.fillStyle = "#2ecc71"; ctx.fillRect(200, 320, 400 * (loadedCount / totalAssets), 20);
-            drawText(`USUWANIE SZAREGO TŁA... ${p}%`, 220, 300, 24, "white");
+            drawText("KARMIENIE KUR...", 240, 300, 30, "white");
             return;
         }
 
@@ -423,10 +427,10 @@
         else if (gameState === "PLAYING") {
             const vL = cameraX - 120, vR = cameraX + 920; const isVis = (o) => o.x > vL && o.x < vR;
 
-            // DRZEWA I SŁOŃCE Z TYŁU (PARALAKSA SŁOŃCA!)
+            // PARALAKSA SŁOŃCA I DRZEWA Z TYŁU
             world.decos.filter(isVis || (d => d.id === 'slonce')).forEach(d => { 
                 if (d.id === 'slonce') {
-                    // Słońce podąża za kurą z efektem paralaksy
+                    // Słońce podąża za kurą z paralaksą
                     drawS(d.id, d.x - cameraX * 0.05, d.y, d.w, d.h); 
                 } else {
                     drawS(d.id, d.x-cameraX, d.y, d.w, d.h); 
@@ -444,60 +448,43 @@
             world.checkpoints.filter(isVis).forEach(cp => drawS('checkPoint', cp.x-cameraX, cp.y, cp.w, cp.h));
             world.chicks.forEach(c => drawS('kurczak', c.x-cameraX, c.y, c.w, c.h));
 
-            // KURA (Wielkość 1.5x)
-            ctx.save(); ctx.translate(player.x - cameraX + 30, player.y + player.h/2); if (player.dir === -1) ctx.scale(-1, 1);
+            // KOKOSZKA (v1.1 Wielkość 2.25x!)
+            ctx.save(); ctx.translate(player.x - cameraX + 45, player.y + player.h/2); if (player.dir === -1) ctx.scale(-1, 1);
             let s = player.dead ? 'kuraNuggets' : (player.vx !== 0 ? 'KuraChodzaca' : 'KuraStojaca');
-            if (!player.onGround && !player.dead) s = 'KuraSkok'; if (keys['w'] && !player.onGround && player.glideFuel > 0) s = 'KuraSzybujaca'; if (player.crouching) s = 'KuraKlucanie';
-            drawS(s, -30, -player.h/2, 60, player.h); 
-            if(player.shieldTimer > 0) { ctx.globalAlpha = 0.4; drawS('tarcza', -40, -40, 80, 80); ctx.globalAlpha = 1; }
+            if (!player.onGround && !player.dead) s = 'KuraSkok'; if (keys['w'] && !player.onGround && player.glideFuel > 0 && player.vy > 1) s = 'KuraSzybujaca'; if (player.crouching) s = 'KuraKlucanie';
+            drawS(s, -45, -player.h/2, 90, player.h); 
+            if(player.shieldTimer > 0) { ctx.globalAlpha = 0.4; drawS('tarcza', -55, -55, 110, 110); ctx.globalAlpha = 1; }
             ctx.restore();
 
-            // INTERFEJS Z OBWÓDKAMI!
+            // INTERFEJS v1.1
             drawS('zebatka', 730, 15, 55, 55); 
             drawText("PKT: " + player.score, 20, 45, 26, "white");
             
             let tY = 85;
-            if(player.shieldTimer > 0) { 
-                drawS('zegar', 20, tY, 35, 35); drawS('tarcza', 60, tY + 4, 28, 28); 
-                drawText(Math.ceil(player.shieldTimer/60) + "s", 95, tY + 26, 22, "white"); tY += 45; 
-            }
-            if(player.jumpBoostTimer > 0) { 
-                drawS('zegar', 20, tY, 35, 35); drawS('strzalkaSkoku', 60, tY + 4, 28, 28); 
-                drawText(Math.ceil(player.jumpBoostTimer/60) + "s", 95, tY + 26, 22, "white"); 
-            }
+            if(player.shieldTimer > 0) { drawS('zegar', 20, tY, 35, 35); drawS('tarcza', 60, tY + 4, 28, 28); drawText(Math.ceil(player.shieldTimer/60) + "s", 95, tY + 26, 22, "white"); tY += 45; }
+            if(player.jumpBoostTimer > 0) { drawS('zegar', 20, tY, 35, 35); drawS('strzalkaSkoku', 60, tY + 4, 28, 28); drawText(Math.ceil(player.jumpBoostTimer/60) + "s", 95, tY + 26, 22, "white"); }
 
+            // RYSOWANIE JOYSTICKÓW DLA MOBILNYCH
             if (isMobile) {
-                ctx.globalAlpha = 0.5;
-                Object.values(mBtns).forEach(b => {
-                    ctx.fillStyle = "#fff"; ctx.fillRect(b.x, b.y, b.w, b.h);
-                    ctx.fillStyle = "#000"; ctx.textAlign = "center"; ctx.font = "bold 16px Arial";
-                    ctx.fillText(b.text, b.x + b.w/2, b.y + b.h/2 + 6);
-                });
-                ctx.globalAlpha = 1.0;
+                // Horizontal (poziomo.png.png)
+                let jh = joysticks.horizontal;
+                drawS('poziomo', jh.x, jh.y, jh.w, jh.h);
+                
+                // Vertical (skokk.png.png)
+                let jv = joysticks.vertical;
+                drawS('skokk', jv.x, jv.y, jv.w, jv.h);
             }
 
             if (isPaused) { 
                 ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.fillRect(0,0,800,600); 
                 if (pauseMenuState === "MAIN") {
                     ctx.textAlign = "center"; drawText("PAUZA", 400, 100, 45, "white");
-                    
-                    drawText("PORADNIK STEROWANIA", 400, 150, 24, "#f1c40f");
-                    drawText("➡️ W prawo: [D] | ⬅️ W lewo: [A]", 400, 195, 20, "white");
-                    drawText("⬆️ Skok: [SPACJA] | ⬇️ Kucanie: [S]", 400, 235, 20, "white");
-                    drawText("🪂 Spadochron (w locie): Przytrzymaj [W]", 400, 275, 20, "white");
-                    
-                    ctx.fillStyle = "#2ecc71"; ctx.fillRect(300, 340, 200, 50); ctx.textAlign = "center"; drawText("WZNÓW", 400, 372, 22, "white");
-                    ctx.fillStyle = "#3498db"; ctx.fillRect(300, 410, 200, 50); drawText("USTAWIENIA", 400, 442, 22, "white");
+                    drawText("WZNÓW", 400, 372, 22, "white");
                     ctx.fillStyle = "#e74c3c"; ctx.fillRect(300, 480, 200, 50); drawText("WYJDŹ DO LOBBY", 400, 512, 22, "white");
                 } 
-                else if (pauseMenuState === "SETTINGS") {
-                    ctx.textAlign = "center"; drawText("USTAWIENIA", 400, 150, 45, "white");
-                    ctx.fillStyle = "#e67e22"; ctx.fillRect(300, 340, 200, 50); drawText("ZRESETUJ ZAPIS GRY", 400, 372, 18, "white");
-                    ctx.fillStyle = "#95a5a6"; ctx.fillRect(300, 480, 200, 50); drawText("WRÓĆ", 400, 512, 22, "white");
-                }
             }
         }
-        drawText("v12.0 Mega", 10, 25, 16, "rgba(255,255,255,0.8)");
+        drawText("v1.1", 10, 25, 16, "rgba(255,255,255,0.8)");
     }
 
     function drawS(n, x, y, w, h) { 
