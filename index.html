@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kokoszka Platformer v1.1 - Mobile Controls & False Transparency Fix</title>
+    <title>Kokoszka Platformer v1.2</title>
     <style>
-        body { margin: 0; background: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        body { margin: 0; background: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; touch-action: none; user-select: none; }
         canvas { background: #87CEEB; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 4px solid #222; image-rendering: pixelated; max-width: 100vw; max-height: 100vh; object-fit: contain; }
     </style>
 </head>
@@ -16,12 +16,12 @@
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
     
-    // NOWA SKALA: Bloki 1.5x (60x60), Kokoszka 2.25x
+    // SKALA v1.2: Bloki 1.5x (60x60), Kokoszka 2.25x (90x90)
     const TILE_SIZE = 60; 
     const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
     // ==========================================================
-    // --- 1. SYSTEM SUPER GREEN SCREEN (ANTY-SIATKA) ---
+    // --- 1. SYSTEM SUPER GUMKI (USUWANIE SZARYCH SIATEK) ---
     // ==========================================================
     const assets = {};
     const basePaths = {
@@ -44,7 +44,7 @@
         'liscie': 'dekoracje/liscie', 'maledrzewo': 'dekoracje/maledrzewo', 
         'duzedrzewo': 'dekoracje/duzedrzewo', 'samotnyKamien': 'dekoracje/samotnyKamien',
         
-        'poziomo': 'ui/poziomo.png.png', 'skokk': 'ui/skokk.png.png' // TWOJE NOWE JOYSTICKI
+        'poziomo': 'poziomo', 'skokk': 'skokk'
     };
 
     let loadedCount = 0;
@@ -52,25 +52,26 @@
     let gameState = "LOADING"; 
     let pauseMenuState = "MAIN";
 
-    // Funkcja do usuwania "fałszywej przezroczystości" (siatki)
-    function applyGreenScreen(img) {
+    function cleanSiatkaTransparency(img, imageName) {
+        if (imageName === 'niebo') return img; 
+        
         let c = document.createElement('canvas');
-        c.width = img.width || 60; c.height = img.height || 60;
+        c.width = img.width || TILE_SIZE; c.height = img.height || TILE_SIZE;
         if(c.width === 0) return img;
+        
         let cx = c.getContext('2d');
         cx.drawImage(img, 0, 0);
+        
         try {
             let imgData = cx.getImageData(0, 0, c.width, c.height);
             let data = imgData.data;
-            
-            // Kolor tła ze siatki (często lewy górny piksel)
             let bgR = data[0], bgG = data[1], bgB = data[2], bgA = data[3];
-            
-            // Jeśli kolor przypomina szary (np. z siatki)
-            if (bgA > 0 && Math.abs(bgR - bgG) < 20 && Math.abs(bgG - bgB) < 20 && bgR > 50 && bgR < 210) {
+
+            if (bgA > 0 && Math.abs(bgR - bgG) < 25 && Math.abs(bgG - bgB) < 25 && bgR > 40 && bgR < 220) {
                 for (let i = 0; i < data.length; i += 4) {
-                    if (Math.abs(data[i] - bgR) < 30 && Math.abs(data[i+1] - bgG) < 30 && Math.abs(data[i+2] - bgB) < 30) {
-                        data[i+3] = 0; // Usuwa siatkę!
+                    let r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+                    if (a > 0 && Math.abs(r - g) < 30 && Math.abs(g - b) < 30 && r > 100) {
+                        data[i+3] = 0; 
                     }
                 }
                 cx.putImageData(imgData, 0, 0);
@@ -85,22 +86,7 @@
     Object.keys(basePaths).forEach(name => {
         let path = basePaths[name];
         
-        // Magia dla joysticków: używa dokładnie ich nazw
-        if (name === 'poziomo' || name === 'skokk') {
-            let img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.onload = () => { 
-                assets[name] = applyGreenScreen(img); // Też usuwa siatkę z joysticków!
-                loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; 
-            };
-            img.onerror = () => { loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; };
-            img.src = path + "?v=" + Date.now();
-            return;
-        }
-        
-        // Inne pliki: próbuje `.png.png`, potem `.png`
-        let basePath = path;
-        let attempts = [`${basePath}.png.png`, `${basePath}.png`];
+        let attempts = [`${path}.png.png`, `${path}.png`, `ui/${path}.png.png`];
         let attemptIndex = 0;
         let img = new Image();
         img.crossOrigin = "Anonymous";
@@ -115,35 +101,36 @@
                 if (loadedCount === totalAssets) gameState = "LOBBY";
             }
         };
-        img.onload = () => { assets[name] = applyGreenScreen(img); loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; };
+        img.onload = () => { assets[name] = cleanSiatkaTransparency(img, name); loadedCount++; if (loadedCount === totalAssets) gameState = "LOBBY"; };
         img.onerror = tryNext; tryNext();
     });
 
     // ==========================================================
-    // --- 2. ZMIENNE GRY (v1.1) ---
+    // --- 2. ZMIENNE GRY ---
     // ==========================================================
     let isPaused = false, currentLevel = "easy", cameraX = 0, keys = {};
     let progress = { easy: 0, medium: 0, hard: 0 };
-    try { let saved = localStorage.getItem('kokoszka_v11'); if (saved) progress = JSON.parse(saved); } catch(e) {}
+    try { let saved = localStorage.getItem('kokoszka_v12'); if (saved) progress = JSON.parse(saved); } catch(e) {}
 
     let world = { tiles: [], hazards: [], checkpoints: [], chicks: [], waters: [], seeds: [], teleports: [], decos: [], powerups: [], lonelyStone: null };
     
-    // KURA O WIELE WIĘKSZA (2.25x) i szybsza!
     let player = { 
         x: 0, y: 0, w: 90, h: 90, vx: 0, vy: 0, speed: 10, onGround: false, crouching: false, dead: false, 
         respawnX: 0, respawnY: 0, deathTimer: 0, glideFuel: 0, inWater: false, score: 0, dir: 1, 
         shieldTimer: 0, jumpBoostTimer: 0 
     };
 
+    let mobileCrouchToggle = false; // NOWOŚĆ: Pamięta, czy na ekranie mobilnym włączono kucanie
+
     // ==========================================================
-    // --- 3. GENERATOR MAPY (v1.1 - Bloki do dna, duże jeziora) ---
+    // --- 3. GENERATOR MAPY ---
     // ==========================================================
     function buildLevel(diff) {
         currentLevel = diff;
         let len = diff === 'easy' ? 1500 : (diff === 'medium' ? 3000 : 4500);
         Object.keys(world).forEach(k => world[k] = []);
         
-        let floorY = 400; // Podłoga wyżej
+        let floorY = 400; 
         let gapCounter = 0;
         let safeZone = 15; 
         let isHard = diff === 'hard';
@@ -152,7 +139,6 @@
         let hazardChance = isHard ? 0.15 : (isMed ? 0.08 : 0.02);
         let gapChance = isHard ? 0.10 : (isMed ? 0.04 : 0.0);
 
-        // Słońce do paralaksy
         world.decos.push({x: 600, y: 50, w: 100, h: 100, id: 'slonce'});
 
         for (let i = 0; i < len; i++) {
@@ -160,7 +146,6 @@
 
             if (i < 15 || i > len - 15) {
                 world.tiles.push({x, y: floorY, w: TILE_SIZE, h: TILE_SIZE, id: 'trawa'});
-                // Wypełnienie ziemią do samego dna
                 for(let dy = floorY + TILE_SIZE; dy < 1500; dy += TILE_SIZE) {
                     world.tiles.push({x, y: dy, w: TILE_SIZE, h: TILE_SIZE, id: 'ziemia'});
                 }
@@ -181,40 +166,33 @@
 
             if (safeZone > 0) safeZone--;
 
-            // SYSTEM GENEROWANIA DUŻYCH JEZIOR WODY
             if (safeZone <= 0 && Math.random() < 0.05) {
-                let waterWidth = Math.floor(Math.random() * 3) + 2; // Szerokość 2-4
+                let waterWidth = Math.floor(Math.random() * 3) + 2;
                 for(let w = 0; w < waterWidth; w++) {
                     let wx = (i + w) * TILE_SIZE;
-                    world.waters.push({x: wx, y: floorY + 15, w: TILE_SIZE, h: TILE_SIZE, id: 'woda'}); // Wklęsłe
+                    world.waters.push({x: wx, y: floorY + 15, w: TILE_SIZE, h: TILE_SIZE, id: 'woda'}); 
                     for(let dy = floorY + TILE_SIZE; dy < 1500; dy += TILE_SIZE) {
                         world.tiles.push({x: wx, y: dy, w: TILE_SIZE, h: TILE_SIZE, id: 'ziemia'});
                     }
                 }
-                i += (waterWidth - 1); // Przesuwa kursor mapy
+                i += (waterWidth - 1); 
                 safeZone = 2;
                 continue;
             } 
             
-            // ZWYKŁY LĄD
             world.tiles.push({x, y: floorY, w: TILE_SIZE, h: TILE_SIZE, id: 'trawa'});
             for(let dy = floorY + TILE_SIZE; dy < 1500; dy += TILE_SIZE) {
                 world.tiles.push({x, y: dy, w: TILE_SIZE, h: TILE_SIZE, id: 'ziemia'});
             }
 
-            // Dekoracje STAŁE
             if (Math.random() < 0.15) {
                 let dec = (Math.random() > 0.5) ? 'krzak' : 'kwiat';
                 world.tiles.push({x, y: floorY - TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE, id: dec}); 
             } 
 
-            // Drzewa dekoracyjne w tle
             if (Math.random() < 0.05) {
-                if (Math.random() > 0.5) {
-                    world.decos.push({x, y: floorY - 200, w: TILE_SIZE * 2, h: TILE_SIZE * 3, id: 'duzedrzewo'});
-                } else {
-                    world.decos.push({x, y: floorY - 140, w: TILE_SIZE * 1.5, h: TILE_SIZE * 2, id: 'maledrzewo'});
-                }
+                if (Math.random() > 0.5) world.decos.push({x, y: floorY - 200, w: TILE_SIZE * 2, h: TILE_SIZE * 3, id: 'duzedrzewo'});
+                else world.decos.push({x, y: floorY - 140, w: TILE_SIZE * 1.5, h: TILE_SIZE * 2, id: 'maledrzewo'});
             }
 
             if (safeZone <= 0 && Math.random() < hazardChance) {
@@ -235,15 +213,16 @@
             }
         }
         
-        player.x = 300; player.y = 300; player.respawnX = 300; player.respawnY = 300;
+        player.x = 300; player.y = 200; player.respawnX = 300; player.respawnY = 200;
         player.vx = 0; player.vy = 0; player.score = 0; player.dead = false; 
         player.shieldTimer = 0; player.jumpBoostTimer = 0; player.glideFuel = 0; cameraX = 0;
+        mobileCrouchToggle = false; // Reset kucania przy nowej grze
         world.chicks.push({x: (len-5)*TILE_SIZE, y: 340, w: 90, h: 90});
         gameState = "PLAYING"; isPaused = false; pauseMenuState = "MAIN";
     }
 
     // ==========================================================
-    // --- 4. STEROWANIE & JOYSTICKI (Tylko Mobilne!) ---
+    // --- 4. STEROWANIE ---
     // ==========================================================
     window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
     window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
@@ -257,25 +236,18 @@
             }
         } 
         else if (gameState === "PLAYING") {
-            if (mx > 740 && my < 60 && !isPaused) {
-                isPaused = true; pauseMenuState = "MAIN"; keys = {};
-            } 
+            if (mx > 740 && my < 60 && !isPaused) { isPaused = true; pauseMenuState = "MAIN"; keys = {}; } 
             else if (isPaused) {
                 if (pauseMenuState === "MAIN") {
                     if (mx > 300 && mx < 500) {
-                        if (my > 340 && my < 390) { isPaused = false; } 
-                        else if (my > 410 && my < 460) { pauseMenuState = "SETTINGS"; } 
+                        if (my > 340 && my < 390) isPaused = false;
+                        else if (my > 410 && my < 460) pauseMenuState = "SETTINGS";
                         else if (my > 480 && my < 530) { gameState = "LOBBY"; isPaused = false; } 
                     }
-                } 
-                else if (pauseMenuState === "SETTINGS") {
+                } else if (pauseMenuState === "SETTINGS") {
                     if (mx > 300 && mx < 500) {
-                        if (my > 340 && my < 390) { 
-                            progress = { easy: 0, medium: 0, hard: 0 };
-                            localStorage.setItem('kokoszka_v11', JSON.stringify(progress));
-                            alert("Zapis gry usunięty!");
-                        }
-                        else if (my > 480 && my < 530) { pauseMenuState = "MAIN"; } 
+                        if (my > 340 && my < 390) { progress = { easy: 0, medium: 0, hard: 0 }; localStorage.setItem('kokoszka_v12', JSON.stringify(progress)); alert("Zapis zresetowany!"); }
+                        else if (my > 480 && my < 530) pauseMenuState = "MAIN";
                     }
                 }
             }
@@ -287,40 +259,53 @@
         handleClick((e.clientX - r.left) * (canvas.width / r.width), (e.clientY - r.top) * (canvas.height / r.height));
     });
 
-    // POZYCJE JOYSTICKÓW DLA MOBILNYCH
-    const joysticks = {
-        horizontal: {x: 40, y: 460, w: 100, h: 100}, // poziomo.png.png (Lewy-Prawy)
-        vertical: {x: 660, y: 460, w: 100, h: 100}  // skokk.png.png (Skok-Kucanie)
-    };
+    const joysticks = { horizontal: {x: 40, y: 460, w: 90, h: 90}, vertical: {x: 670, y: 460, w: 90, h: 90} };
 
     function handleTouches(e) {
         if(gameState === "PLAYING" && !isPaused) e.preventDefault();
-        keys['a'] = false; keys['d'] = false; keys['s'] = false; keys['w'] = false; keys[' '] = false;
+        
+        // Czyszczenie klawiszy, ale s (kucanie) przejmuje stan z naszego przełącznika!
+        keys['a'] = false; keys['d'] = false; keys['w'] = false; keys[' '] = false;
+        keys['s'] = mobileCrouchToggle; 
         
         const r = canvas.getBoundingClientRect();
+
+        // 1. Sprawdzanie ruchu (przytrzymanie na ekranie)
         for (let i = 0; i < e.touches.length; i++) {
             let tx = (e.touches[i].clientX - r.left) * (canvas.width / r.width);
             let ty = (e.touches[i].clientY - r.top) * (canvas.height / r.height);
 
-            // Tapy do Menu
-            if (e.type === 'touchstart' && i === 0 && (gameState === "LOBBY" || isPaused || (tx > 740 && ty < 60))) handleClick(tx, ty);
+            if (e.type === 'touchstart' && (gameState === "LOBBY" || isPaused || (tx > 740 && ty < 60))) { handleClick(tx, ty); return; }
 
-            // Logika Joysticków w grze
             if (gameState === "PLAYING" && !isPaused && isMobile) {
-                // Horizontal (Lewo-Prawo)
                 let jh = joysticks.horizontal;
-                if (tx > jh.x && tx < jh.x + jh.w && ty > jh.y && ty < jh.y + jh.h) {
-                    let centerX = jh.x + jh.w / 2;
-                    if (tx < centerX - 20) keys['a'] = true; // Lewo
-                    else if (tx > centerX + 20) keys['d'] = true; // Prawo
+                if (tx > jh.x - 20 && tx < jh.x + jh.w + 20 && ty > jh.y - 20 && ty < jh.y + jh.h + 20) {
+                    let cX = jh.x + jh.w / 2;
+                    if (tx < cX - 10) keys['a'] = true;
+                    else if (tx > cX + 10) keys['d'] = true;
                 }
-
-                // Vertical (Skok-Kucanie)
                 let jv = joysticks.vertical;
-                if (tx > jv.x && tx < jv.x + jv.w && ty > jv.y && ty < jv.y + jv.h) {
-                    let centerY = jv.y + jv.h / 2;
-                    if (ty < centerY - 20) keys['w'] = true; // Skok (u góry)
-                    else if (ty > centerY + 20) keys['s'] = true; // Kucanie (u dołu)
+                if (tx > jv.x - 20 && tx < jv.x + jv.w + 20 && ty > jv.y - 20 && ty < jv.y + jv.h + 20) {
+                    let cY = jv.y + jv.h / 2;
+                    if (ty < cY - 10) keys['w'] = true; // Tylko Skok/Lot tutaj
+                }
+            }
+        }
+
+        // 2. NOWOŚĆ: Przełącznik dla przycisku KUCANIA (Tylko na Start Dotyku)
+        if (e.type === 'touchstart' && gameState === "PLAYING" && !isPaused && isMobile) {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                let tx = (e.changedTouches[i].clientX - r.left) * (canvas.width / r.width);
+                let ty = (e.changedTouches[i].clientY - r.top) * (canvas.height / r.height);
+                let jv = joysticks.vertical;
+                
+                // Jeśli tapnąłeś dolną część prawego joysticka
+                if (tx > jv.x - 20 && tx < jv.x + jv.w + 20 && ty > jv.y - 20 && ty < jv.y + jv.h + 20) {
+                    let cY = jv.y + jv.h / 2;
+                    if (ty > cY + 10) { 
+                        mobileCrouchToggle = !mobileCrouchToggle; // ZMIANA STANU ON/OFF!
+                        keys['s'] = mobileCrouchToggle;
+                    }
                 }
             }
         }
@@ -335,7 +320,7 @@
     function collides(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
     // ==========================================================
-    // --- 5. FIZYKA (v1.1 DOPASOWANA DO DUŻEJ KURY) ---
+    // --- 5. LOGIKA RUCHU ---
     // ==========================================================
     function update() {
         if (gameState !== "PLAYING" || isPaused) return;
@@ -344,13 +329,12 @@
         if (player.shieldTimer > 0) player.shieldTimer--; 
         if (player.jumpBoostTimer > 0) player.jumpBoostTimer--;
         
-        if (player.dead) { player.vy += 1.2; player.y += player.vy; player.deathTimer++; if (player.deathTimer > 60) { player.dead = false; player.x = player.respawnX; player.y = player.respawnY; player.vy = 0; player.deathTimer = 0; player.h = 90; } return; }
+        if (player.dead) { player.vy += 1.2; player.y += player.vy; player.deathTimer++; if (player.deathTimer > 60) { player.dead = false; player.x = player.respawnX; player.y = player.respawnY; player.vy = 0; player.deathTimer = 0; player.h = 90; mobileCrouchToggle = false; keys['s'] = false; } return; }
 
         const near = (obj) => obj.x > cameraX - 100 && obj.x < cameraX + 900;
         const activeTiles = world.tiles.filter(near); 
         player.inWater = world.waters.filter(near).some(w => collides(player, w));
 
-        // WIĘKSZY SKOK
         if ((keys['w'] || keys[' ']) && !player.dead) {
             let p = player.jumpBoostTimer > 0 ? -28 : -22; 
             if (player.inWater) player.vy = -10; 
@@ -365,90 +349,52 @@
         player.vx = 0; if (keys['a']) { player.vx = -spd; player.dir = -1; } if (keys['d']) { player.vx = spd; player.dir = 1; } if (player.inWater) player.vx *= 0.6; player.x += player.vx;
         activeTiles.forEach(t => { if (collides(player, t)) { if (player.vx > 0) player.x = t.x - player.w; if (player.vx < 0) player.x = t.x + t.w; }});
 
-        // SPADOCHRON (w locie trzymaj [W])
         if (player.onGround) player.glideFuel = 50; 
         let isGliding = false;
-        if (keys['w'] && !player.onGround && !player.inWater && player.glideFuel > 0 && player.vy > 1) {
+        if ((keys['w'] || keys[' ']) && !player.onGround && !player.inWater && player.glideFuel > 0 && player.vy > 1) {
             player.vy = 1.0; player.glideFuel--; isGliding = true;
         }
         
-        if (!isGliding) { player.vy += player.inWater ? 0.4 : 1.3; } // Grawitacja
+        if (!isGliding) { player.vy += player.inWater ? 0.4 : 1.3; } 
         
         player.y += player.vy; player.onGround = false;
         activeTiles.forEach(t => { if (collides(player, t)) { if (player.vy > 0) { player.y = t.y - player.h; player.vy = 0; player.onGround = true; } else if (player.vy < 0) { player.y = t.y + t.h; player.vy = 0; } }});
 
         if (player.y > 1000) player.dead = true;
         world.hazards.filter(near).forEach(h => { if (collides(player, h) && player.shieldTimer <= 0) { player.dead = true; player.vy = -12; }});
-        
-        world.powerups.filter(near).forEach((p) => { 
-            if (collides(player, p)) { 
-                if (p.id === 'tarcza') player.shieldTimer = 300; 
-                if (p.id === 'strzalkaSkoku') player.jumpBoostTimer = 600; 
-                world.powerups.splice(world.powerups.indexOf(p), 1); 
-            }
-        });
-        
+        world.powerups.filter(near).forEach((p) => { if (collides(player, p)) { if (p.id === 'tarcza') player.shieldTimer = 300; if (p.id === 'strzalkaSkoku') player.jumpBoostTimer = 600; world.powerups.splice(world.powerups.indexOf(p), 1); }});
         world.checkpoints.filter(near).forEach(c => { if (collides(player, c)) { player.respawnX = c.x; player.respawnY = c.y - 90; }});
         world.seeds.filter(near).forEach((s) => { if (collides(player, s)) { world.seeds.splice(world.seeds.indexOf(s), 1); player.score += 10; }});
-        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v11', JSON.stringify(progress)); } catch(e){} }});
+        world.chicks.forEach(c => { if (collides(player, c)) { world.chicks = []; progress[currentLevel] = 1; try { localStorage.setItem('kokoszka_v12', JSON.stringify(progress)); } catch(e){} }});
     }
 
     // ==========================================================
-    // --- 6. RYSOWANIE (ANTY-SIATKA, v1.1 Estetyka) ---
+    // --- 6. RYSOWANIE ---
     // ==========================================================
-    
-    // Funkcja do rysowania tekstu z obwódką
-    function drawText(text, x, y, size, color) {
-        ctx.font = `bold ${size}px Arial`;
-        ctx.textAlign = "left";
-        ctx.strokeStyle = "black"; ctx.lineWidth = 4; ctx.strokeText(text, x, y); // Obwódka
-        ctx.fillStyle = color; ctx.fillText(text, x, y); // Wypełnienie
-    }
+    function drawTextOutline(text, x, y, size, color) { ctx.font = `bold ${size}px Arial`; ctx.textAlign = "left"; ctx.strokeStyle = "black"; ctx.lineWidth = 4; ctx.strokeText(text, x, y); ctx.fillStyle = color; ctx.fillText(text, x, y); }
 
     function draw() {
-        if (gameState === "LOADING") {
-            ctx.fillStyle = "#111"; ctx.fillRect(0,0,800,600);
-            drawText("KARMIENIE KUR...", 240, 300, 30, "white");
-            return;
-        }
+        if (gameState === "LOADING") { ctx.fillStyle = "#111"; ctx.fillRect(0,0,800,600); drawTextOutline("KARMIENIE KUR...", 280, 300, 30, "white"); return; }
 
-        // TŁO ZABLOKOWANE - Normalny rozmiar 800x600
         ctx.fillStyle = "#87CEEB"; ctx.fillRect(0,0,800,600);
-        if(assets['niebo'] && assets['niebo'].width > 50) { ctx.drawImage(assets['niebo'], 0, 0, 800, 600); }
+        if(assets['niebo']) ctx.drawImage(assets['niebo'], 0, 0, 800, 600);
 
         if (gameState === "LOBBY") {
             ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,800,600);
-            ctx.textAlign = "center"; drawText("KOKOSZKA: PERFEKCJA", 400, 100, 40, "white");
-            ['easy', 'medium', 'hard'].forEach((lv, i) => {
-                ctx.fillStyle = progress[lv] ? "#2ecc71" : "#e67e22"; ctx.fillRect(300, 200 + i*100, 200, 50);
-                ctx.textAlign = "center"; drawText(`${lv.toUpperCase()} (${progress[lv]}/1)`, 400, 235 + i*100, 20, "white");
-            });
+            ctx.textAlign = "center"; drawTextOutline("KOKOSZKA PLATFORMER", 400, 100, 40, "white");
+            ['easy', 'medium', 'hard'].forEach((lv, i) => { ctx.fillStyle = progress[lv] ? "#2ecc71" : "#e67e22"; ctx.fillRect(300, 200 + i*100, 200, 50); ctx.textAlign = "center"; drawTextOutline(`${lv.toUpperCase()} (${progress[lv]}/1)`, 400, 235 + i*100, 20, "white"); });
         } 
         else if (gameState === "PLAYING") {
             const vL = cameraX - 120, vR = cameraX + 920; const isVis = (o) => o.x > vL && o.x < vR;
-
-            // PARALAKSA SŁOŃCA I DRZEWA Z TYŁU
-            world.decos.filter(isVis || (d => d.id === 'slonce')).forEach(d => { 
-                if (d.id === 'slonce') {
-                    // Słońce podąża za kurą z paralaksą
-                    drawS(d.id, d.x - cameraX * 0.05, d.y, d.w, d.h); 
-                } else {
-                    drawS(d.id, d.x-cameraX, d.y, d.w, d.h); 
-                }
-            });
-            
-            // BLOKI
+            world.decos.filter(isVis || (d => d.id === 'slonce')).forEach(d => { if (d.id === 'slonce') drawS(d.id, d.x - cameraX * 0.05, d.y, d.w, d.h); else drawS(d.id, d.x-cameraX, d.y, d.w, d.h); });
             world.tiles.filter(isVis).forEach(t => drawS(t.id, t.x-cameraX, t.y, t.w, t.h));
             world.hazards.filter(isVis).forEach(h => drawS(h.id, h.x-cameraX, h.y, h.w, h.h));
-            
             ctx.globalAlpha = 0.6; world.waters.filter(isVis).forEach(w => drawS('woda', w.x-cameraX, w.y, w.w, w.h)); ctx.globalAlpha = 1;
-            
             world.seeds.filter(isVis).forEach(s => drawS('Ziarna', s.x-cameraX, s.y, s.w, s.h));
             world.powerups.filter(isVis).forEach(p => drawS(p.id, p.x-cameraX, p.y, p.w, p.h));
             world.checkpoints.filter(isVis).forEach(cp => drawS('checkPoint', cp.x-cameraX, cp.y, cp.w, cp.h));
             world.chicks.forEach(c => drawS('kurczak', c.x-cameraX, c.y, c.w, c.h));
 
-            // KOKOSZKA (v1.1 Wielkość 2.25x!)
             ctx.save(); ctx.translate(player.x - cameraX + 45, player.y + player.h/2); if (player.dir === -1) ctx.scale(-1, 1);
             let s = player.dead ? 'kuraNuggets' : (player.vx !== 0 ? 'KuraChodzaca' : 'KuraStojaca');
             if (!player.onGround && !player.dead) s = 'KuraSkok'; if (keys['w'] && !player.onGround && player.glideFuel > 0 && player.vy > 1) s = 'KuraSzybujaca'; if (player.crouching) s = 'KuraKlucanie';
@@ -456,41 +402,43 @@
             if(player.shieldTimer > 0) { ctx.globalAlpha = 0.4; drawS('tarcza', -55, -55, 110, 110); ctx.globalAlpha = 1; }
             ctx.restore();
 
-            // INTERFEJS v1.1
-            drawS('zebatka', 730, 15, 55, 55); 
-            drawText("PKT: " + player.score, 20, 45, 26, "white");
-            
+            drawS('zebatka', 730, 15, 55, 55); drawTextOutline("PKT: " + player.score, 20, 45, 26, "white");
             let tY = 85;
-            if(player.shieldTimer > 0) { drawS('zegar', 20, tY, 35, 35); drawS('tarcza', 60, tY + 4, 28, 28); drawText(Math.ceil(player.shieldTimer/60) + "s", 95, tY + 26, 22, "white"); tY += 45; }
-            if(player.jumpBoostTimer > 0) { drawS('zegar', 20, tY, 35, 35); drawS('strzalkaSkoku', 60, tY + 4, 28, 28); drawText(Math.ceil(player.jumpBoostTimer/60) + "s", 95, tY + 26, 22, "white"); }
+            if(player.shieldTimer > 0) { drawS('zegar', 20, tY, 35, 35); drawS('tarcza', 60, tY + 4, 28, 28); drawTextOutline(Math.ceil(player.shieldTimer/60) + "s", 95, tY + 26, 22, "white"); tY += 45; }
+            if(player.jumpBoostTimer > 0) { drawS('zegar', 20, tY, 35, 35); drawS('strzalkaSkoku', 60, tY + 4, 28, 28); drawTextOutline(Math.ceil(player.jumpBoostTimer/60) + "s", 95, tY + 26, 22, "white"); }
+            
+            if (isMobile) { 
+                let jh = joysticks.horizontal; let jv = joysticks.vertical;
+                drawS('poziomo', jh.x, jh.y, jh.w, jh.h); 
+                drawS('skokk', jv.x, jv.y, jv.w, jv.h); 
 
-            // RYSOWANIE JOYSTICKÓW DLA MOBILNYCH
-            if (isMobile) {
-                // Horizontal (poziomo.png.png)
-                let jh = joysticks.horizontal;
-                drawS('poziomo', jh.x, jh.y, jh.w, jh.h);
+                ctx.textAlign = "center";
+                drawTextOutline("RUCH", jh.x + jh.w/2, jh.y - 10, 16, "white");
+                drawTextOutline("SKOK / LOT", jv.x + jv.w/2, jv.y - 10, 16, "white");
                 
-                // Vertical (skokk.png.png)
-                let jv = joysticks.vertical;
-                drawS('skokk', jv.x, jv.y, jv.w, jv.h);
+                // Kolor zielony, jeśli przełącznik kucania jest aktywny!
+                let crouchColor = mobileCrouchToggle ? "#2ecc71" : "white";
+                drawTextOutline("KUCANIE", jv.x + jv.w/2, jv.y + jv.h + 20, 16, crouchColor);
             }
-
+            
             if (isPaused) { 
                 ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.fillRect(0,0,800,600); 
                 if (pauseMenuState === "MAIN") {
-                    ctx.textAlign = "center"; drawText("PAUZA", 400, 100, 45, "white");
-                    drawText("WZNÓW", 400, 372, 22, "white");
-                    ctx.fillStyle = "#e74c3c"; ctx.fillRect(300, 480, 200, 50); drawText("WYJDŹ DO LOBBY", 400, 512, 22, "white");
-                } 
+                    ctx.textAlign = "center"; drawTextOutline("PAUZA", 400, 150, 45, "white");
+                    ctx.fillStyle = "#2ecc71"; ctx.fillRect(300, 300, 200, 50); drawTextOutline("WZNÓW", 400, 332, 22, "white");
+                    ctx.fillStyle = "#3498db"; ctx.fillRect(300, 380, 200, 50); drawTextOutline("USTAWIENIA", 400, 412, 22, "white");
+                    ctx.fillStyle = "#e74c3c"; ctx.fillRect(300, 460, 200, 50); drawTextOutline("WYJDŹ DO LOBBY", 400, 492, 22, "white");
+                } else if (pauseMenuState === "SETTINGS") {
+                    ctx.textAlign = "center"; drawTextOutline("USTAWIENIA", 400, 150, 45, "white");
+                    ctx.fillStyle = "#e67e22"; ctx.fillRect(300, 340, 200, 50); drawTextOutline("ZRESETUJ ZAPIS", 400, 372, 20, "white");
+                    ctx.fillStyle = "#95a5a6"; ctx.fillRect(300, 480, 200, 50); drawTextOutline("WRÓĆ", 400, 512, 22, "white");
+                }
             }
         }
-        drawText("v1.1", 10, 25, 16, "rgba(255,255,255,0.8)");
+        ctx.textAlign = "left"; drawTextOutline("v1.2", 10, 25, 18, "rgba(255,255,255,0.8)");
     }
 
-    function drawS(n, x, y, w, h) { 
-        if (assets[n] && assets[n].width > 10) ctx.drawImage(assets[n], x, y, w, h); 
-    }
-
+    function drawS(n, x, y, w, h) { if (assets[n] && assets[n].width > 10) ctx.drawImage(assets[n], x, y, w, h); }
     function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
     requestAnimationFrame(gameLoop);
 </script>
